@@ -1,0 +1,100 @@
+"""
+Test script for multimodal PPTX extraction.
+
+This pipeline:
+1. Renders slides as images using LibreOffice
+2. Extracts native text from the PPTX
+3. Sends BOTH to GPT-4.1 for semantic analysis
+4. Returns clean, structured JSON
+
+Requires:
+- LibreOffice installed (for slide rendering)
+- pip install openai pymupdf
+"""
+import os
+import sys
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from extractors.helpers import check_rendering_available
+
+
+def main():
+    # Check prerequisites
+    print("=" * 60)
+    print("Multimodal PPTX Extraction Test")
+    print("=" * 60)
+    
+    # Check LibreOffice
+    can_render, msg = check_rendering_available()
+    if not can_render:
+        print(f"\n❌ Rendering not available: {msg}")
+        print("\nPlease install LibreOffice first.")
+        return
+    
+    print(f"✅ Rendering available: {msg}")
+    
+    # Check environment variables
+    required_vars = [
+        "AZURE_AI_ENDPOINT",
+        "AZURE_AI_API_KEY", 
+        "GPT_4_1_DEPLOYMENT"
+    ]
+    
+    missing = [v for v in required_vars if not os.getenv(v)]
+    if missing:
+        print(f"\n❌ Missing environment variables: {missing}")
+        return
+    
+    print("✅ Environment variables configured")
+    
+    # Import after checks
+    from extractors.helpers import quick_extract
+    
+    # Path to test PPTX
+    pptx_path = os.path.join(
+        os.path.dirname(__file__),
+        "source-docs",
+        "evidence1-6.pptx"
+    )
+    
+    output_path = os.path.join(
+        os.path.dirname(__file__),
+        "source-docs",
+        "evidence1-6_multimodal.json"
+    )
+    
+    print(f"\n📄 Input: {pptx_path}")
+    print(f"📝 Output: {output_path}")
+    print("-" * 60)
+    
+    # Run extraction
+    result = quick_extract(pptx_path, output_path, verbose=True)
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print("EXTRACTION COMPLETE")
+    print("=" * 60)
+    print(f"Total slides: {result['total_slides']}")
+    
+    # Show sample results
+    print("\nSample results (first 5 slides):")
+    for slide in result["slides"][:5]:
+        slide_idx = slide.get("index", "?")
+        text_preview = slide.get("text", "")[:60].replace("\n", " ")
+        print(f"  Slide {slide_idx}: {text_preview}...")
+    
+    # Show file size
+    if os.path.exists(output_path):
+        size = os.path.getsize(output_path)
+        print(f"\n📊 Output file size: {size:,} bytes ({size/1024:.1f} KB)")
+    
+    print(f"\n✅ Full results saved to: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
