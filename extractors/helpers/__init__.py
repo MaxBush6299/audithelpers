@@ -21,6 +21,7 @@ from .multimodal_extract import (
     MultimodalConfig,
     multimodal_extract,
     quick_extract,
+    quick_extract_gpt5,
 )
 
 __all__ = [
@@ -55,4 +56,5 @@ __all__ = [
     # Multimodal extraction
     "multimodal_extract",
     "quick_extract",
+    "quick_extract_gpt5",
 ]

@@ -7,7 +7,8 @@ A Python toolkit for extracting and analyzing content from GM calibration eviden
 - **PPTX Extraction**: Extract text, tables, and images from PowerPoint presentations
 - **Excel Extraction**: Extract structured data from Excel workbooks
 - **Document Intelligence OCR**: Extract text from embedded images using Azure Document Intelligence
-- **Multimodal Analysis**: Combine native text + OCR + GPT-4.1 vision for optimal text extraction
+- **Multimodal Analysis**: Combine native text + OCR + LLM vision for optimal text extraction
+- **Multi-Model Support**: GPT-4.1 and GPT-5.1 models supported (separate endpoints)
 - **Azure Infrastructure**: Bicep templates for deploying required Azure resources
 
 ## Architecture
@@ -27,9 +28,9 @@ A Python toolkit for extracting and analyzing content from GM calibration eviden
 │                             │                                                │
 │                             ▼                                                │
 │                    ┌────────────────┐                                        │
-│                    │   GPT-4.1      │                                        │
-│                    │   Vision       │                                        │
-│                    │   (reconcile)  │                                        │
+│                    │  GPT-4.1 or    │                                        │
+│                    │  GPT-5.1       │                                        │
+│                    │  Vision        │                                        │
 │                    └────────┬───────┘                                        │
 │                             │                                                │
 │                             ▼                                                │
@@ -54,8 +55,7 @@ ai-calibration/
 │       ├── llm_helpers.py        # GPT-4.1 vision analysis
 │       ├── slide_renderer.py     # Slide to image rendering
 │       ├── multimodal_extract.py # Combined extraction pipeline
-│       ├── blob_helpers.py       # Azure Blob Storage utilities
-│       └── cu_helpers.py         # Content Understanding (deprecated)
+│       └── blob_helpers.py       # Azure Blob Storage utilities
 ├── iac/                          # Azure Infrastructure as Code
 │   ├── main.bicep               # Main deployment template
 │   ├── modules/                 # Bicep modules
@@ -107,10 +107,15 @@ Create a `.env` file in the project root:
 AZURE_DI_ENDPOINT=https://<your-di>.cognitiveservices.azure.com
 AZURE_DI_KEY=<your-di-key>
 
-# Azure AI Foundry (for GPT-4.1)
+# Azure AI Foundry - GPT-4.1
 AZURE_AI_ENDPOINT=https://<your-ai-resource>.services.ai.azure.com
 AZURE_AI_API_KEY=<your-ai-key>
 GPT_4_1_DEPLOYMENT=<your-gpt4-deployment-name>
+
+# Azure AI Foundry - GPT-5.1 (optional, separate endpoint)
+AZURE_AI_GPT5_ENDPOINT=https://<your-gpt5-resource>.services.ai.azure.com
+AZURE_AI_GPT5_API_KEY=<your-gpt5-key>
+GPT_5_1_DEPLOYMENT=<your-gpt5-deployment-name>
 
 # Azure Blob Storage (optional)
 AZURE_STORAGE_CONNECTION_STRING=<your-connection-string>
@@ -159,18 +164,29 @@ Output format:
 For best results, use the multimodal pipeline that combines all three sources:
 
 ```python
-from extractors.helpers import quick_extract
+from extractors.helpers import quick_extract, quick_extract_gpt5
 
 # Extracts using:
 # 1. Native PPTX text (cleanest for text boxes)
 # 2. Document Intelligence OCR (for embedded images)
-# 3. GPT-4.1 Vision (validates and structures everything)
+# 3. LLM Vision (validates and structures everything)
 
+# Using GPT-4.1 (default)
 result = quick_extract(
     "path/to/presentation.pptx",
     output_path="output.json",
     verbose=True
 )
+
+# Using GPT-5.1
+result = quick_extract(
+    "path/to/presentation.pptx",
+    output_path="output.json",
+    model="gpt-5.1"  # Use GPT-5.1 instead
+)
+
+# Or use the convenience function
+result = quick_extract_gpt5("path/to/presentation.pptx")
 ```
 
 ### Excel Extraction
@@ -210,8 +226,11 @@ text = analyze_slide_multimodal(llm, slide_image_bytes, extracted_text)
 # Test DI-based PPTX extraction
 python test_pptx_extract.py
 
-# Test multimodal extraction (requires PowerPoint or LibreOffice)
+# Test multimodal extraction with GPT-4.1 (default)
 python test_multimodal_extract.py
+
+# Test multimodal extraction with GPT-5.1
+python test_multimodal_extract.py --gpt5
 ```
 
 ## Requirements
@@ -226,7 +245,7 @@ python test_multimodal_extract.py
 
 ### Azure Services
 - **Azure Document Intelligence** - OCR for embedded images
-- **Azure AI Foundry** - GPT-4.1 vision model
+- **Azure AI Foundry** - GPT-4.1 and/or GPT-5.1 vision models
 - **Azure Blob Storage** (optional) - Temporary file storage
 
 ### System Requirements (for Multimodal)

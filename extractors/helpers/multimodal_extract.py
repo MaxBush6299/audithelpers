@@ -35,6 +35,7 @@ class MultimodalConfig:
     render_dpi: int = 150           # Slide render quality
     cache_rendered_slides: bool = True
     use_di_for_images: bool = True  # Whether to OCR embedded images with DI
+    model_type: str = "gpt-4.1"     # Model type: "gpt-4.1" or "gpt-5.1"
 
 
 def extract_native_text(slide, include_tables: bool = True) -> str:
@@ -214,10 +215,14 @@ def multimodal_extract(
         # Send ALL sources to LLM for final reconciliation
         if slide_image_bytes:
             try:
+                # GPT-5.1 requires max_completion_tokens instead of max_tokens
+                use_max_completion_tokens = config.model_type == "gpt-5.1"
+                
                 llm_text = analyze_slide_multimodal(
                     config.llm,
                     slide_image_bytes,
-                    combined_extracted_text  # Now includes both native + DI OCR
+                    combined_extracted_text,  # Now includes both native + DI OCR
+                    use_max_completion_tokens=use_max_completion_tokens
                 )
                 
                 if verbose:
@@ -256,7 +261,8 @@ def quick_extract(
     pptx_path: str,
     output_path: Optional[str] = None,
     verbose: bool = True,
-    use_di: bool = True
+    use_di: bool = True,
+    model: str = "gpt-4.1"
 ) -> Dict[str, Any]:
     """
     Convenience function that loads config from environment variables.
@@ -264,10 +270,20 @@ def quick_extract(
     Combines ALL THREE sources for optimal extraction:
     1. Native text from PPTX (cleanest for text boxes)
     2. Document Intelligence OCR on embedded images (catches text in screenshots)
-    3. LLM vision (GPT-4.1) to validate and reconcile all sources
+    3. LLM vision to validate and reconcile all sources
     
-    Required env vars:
+    Args:
+        pptx_path: Path to the PPTX file
+        output_path: Optional path to save output JSON
+        verbose: Print progress
+        use_di: Whether to use Document Intelligence for embedded image OCR
+        model: Which model to use - "gpt-4.1" or "gpt-5.1"
+    
+    Required env vars for GPT-4.1:
     - AZURE_AI_ENDPOINT, AZURE_AI_API_KEY, GPT_4_1_DEPLOYMENT
+    
+    Required env vars for GPT-5.1:
+    - AZURE_AI_GPT5_ENDPOINT, AZURE_AI_GPT5_API_KEY, GPT_5_1_DEPLOYMENT
     
     Optional env vars (for DI OCR):
     - AZURE_DI_ENDPOINT, AZURE_DI_KEY
@@ -275,12 +291,23 @@ def quick_extract(
     from dotenv import load_dotenv
     load_dotenv()
     
-    # LLM config (required)
-    llm_config = LLMConfig(
-        endpoint=os.environ["AZURE_AI_ENDPOINT"],
-        api_key=os.environ["AZURE_AI_API_KEY"],
-        deployment=os.environ["GPT_4_1_DEPLOYMENT"]
-    )
+    # LLM config based on model selection
+    if model == "gpt-5.1":
+        llm_config = LLMConfig(
+            endpoint=os.environ["AZURE_AI_GPT5_ENDPOINT"],
+            api_key=os.environ["AZURE_AI_GPT5_API_KEY"],
+            deployment=os.environ["GPT_5_1_DEPLOYMENT"]
+        )
+        if verbose:
+            print(f"[Pipeline] Using GPT-5.1 model")
+    else:
+        llm_config = LLMConfig(
+            endpoint=os.environ["AZURE_AI_ENDPOINT"],
+            api_key=os.environ["AZURE_AI_API_KEY"],
+            deployment=os.environ["GPT_4_1_DEPLOYMENT"]
+        )
+        if verbose:
+            print(f"[Pipeline] Using GPT-4.1 model")
     
     # DI config (optional - for embedded image OCR)
     di_config = None
@@ -293,7 +320,25 @@ def quick_extract(
     config = MultimodalConfig(
         llm=llm_config,
         di=di_config,
-        use_di_for_images=use_di and di_config is not None
+        use_di_for_images=use_di and di_config is not None,
+        model_type=model
     )
     
     return multimodal_extract(pptx_path, config, output_path, verbose)
+
+
+def quick_extract_gpt5(
+    pptx_path: str,
+    output_path: Optional[str] = None,
+    verbose: bool = True,
+    use_di: bool = True
+) -> Dict[str, Any]:
+    """
+    Convenience function for GPT-5.1 extraction.
+    
+    Same as quick_extract but uses GPT-5.1 by default.
+    
+    Required env vars:
+    - AZURE_AI_GPT5_ENDPOINT, AZURE_AI_GPT5_API_KEY, GPT_5_1_DEPLOYMENT
+    """
+    return quick_extract(pptx_path, output_path, verbose, use_di, model="gpt-5.1")

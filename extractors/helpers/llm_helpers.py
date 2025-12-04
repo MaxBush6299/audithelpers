@@ -57,7 +57,8 @@ def analyze_slide_multimodal(
     config: LLMConfig,
     slide_image_bytes: bytes,
     extracted_text: str,
-    image_media_type: str = "image/png"
+    image_media_type: str = "image/png",
+    use_max_completion_tokens: bool = False
 ) -> str:
     """
     Extract accurate text representation from a slide using LLM vision.
@@ -67,6 +68,8 @@ def analyze_slide_multimodal(
         slide_image_bytes: The slide rendered as an image (PNG/JPEG)
         extracted_text: Pre-extracted text from the slide (for reference)
         image_media_type: MIME type of the image
+        use_max_completion_tokens: If True, use max_completion_tokens instead of max_tokens
+                                   (required for GPT-5.1 and newer o-series models)
         
     Returns:
         Clean text representation of the slide content
@@ -79,10 +82,10 @@ def analyze_slide_multimodal(
     # Build the prompt
     prompt = TEXT_EXTRACTION_PROMPT.format(extracted_text=extracted_text)
     
-    # Call the model with vision
-    response = client.chat.completions.create(
-        model=config.deployment,
-        messages=[
+    # Build completion kwargs - GPT-5.1 uses max_completion_tokens instead of max_tokens
+    completion_kwargs = {
+        "model": config.deployment,
+        "messages": [
             {
                 "role": "user",
                 "content": [
@@ -100,9 +103,17 @@ def analyze_slide_multimodal(
                 ]
             }
         ],
-        max_tokens=4000,
-        temperature=0.1,  # Low temperature for accurate extraction
-    )
+        "temperature": 0.1,  # Low temperature for accurate extraction
+    }
+    
+    # Use appropriate token parameter based on model
+    if use_max_completion_tokens:
+        completion_kwargs["max_completion_tokens"] = 4000
+    else:
+        completion_kwargs["max_tokens"] = 4000
+    
+    # Call the model with vision
+    response = client.chat.completions.create(**completion_kwargs)
     
     return response.choices[0].message.content.strip()
 
