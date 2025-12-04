@@ -45,15 +45,3 @@ class DIConfig:
             endpoint=self.endpoint,
             credential=AzureKeyCredential(self.key)
         )
-
-
-# Legacy: Keep CUConfig for backward compatibility but mark as deprecated
-@dataclass
-class CUConfig:
-    """Azure Content Understanding configuration (deprecated - use DIConfig)."""
-    endpoint: str                            # e.g., "https://<your-cu>.cognitiveservices.azure.com"
-    key: str                                 # Ocp-Apim-Subscription-Key
-    api_version: str = "2025-11-01"          # keep configurable to avoid hard-coding
-    analyzer: str = "prebuilt-layout"        # "prebuilt-read" or "prebuilt-layout"
-    poll_interval_seconds: float = 1.2
-    timeout_seconds: int = 120

@@ -7,19 +7,19 @@ Main modules:
 
 Example usage:
     from extractors.ppt_extract import pptx_to_unified_json
-    from extractors.xlsx_extract import extract_xlsx
+    from extractors.xlsx_extract import extract_pi_rows_xlsx
     
     # Extract PPTX with compact output
     result = pptx_to_unified_json("presentation.pptx", compact=True)
     
     # Extract Excel
-    result = extract_xlsx("workbook.xlsx")
+    result = extract_pi_rows_xlsx("workbook.xlsx")
 """
 
 from .ppt_extract import pptx_to_unified_json
-from .xlsx_extract import extract_xlsx
+from .xlsx_extract import extract_pi_rows_xlsx
 
 __all__ = [
     "pptx_to_unified_json",
-    "extract_xlsx",
+    "extract_pi_rows_xlsx",
 ]
