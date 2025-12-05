@@ -1,5 +1,5 @@
 // Main deployment template for AI Calibration infrastructure
-// Deploys: Storage Account, Azure AI Services, Document Intelligence
+// Deploys: Storage Account, Azure OpenAI, Document Intelligence
 
 targetScope = 'resourceGroup'
 
@@ -43,7 +43,7 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
-// Azure AI Services (Content Understanding)
+// Azure OpenAI Services (for GPT-4.1/5.1 vision models)
 module aiServices 'modules/ai-services.bicep' = {
   name: 'ai-services-deployment'
   params: {

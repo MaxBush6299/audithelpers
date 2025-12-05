@@ -1,6 +1,6 @@
-// Azure AI Services module (Content Understanding)
+// Azure OpenAI Services module (for GPT-4.1/5.1 vision models)
 
-@description('Azure AI Services account name')
+@description('Azure OpenAI Services account name')
 param aiServicesName string
 
 @description('Location for the AI Services account')
@@ -15,7 +15,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = 
   sku: {
     name: sku
   }
-  kind: 'CognitiveServices' // Multi-service account that includes Content Understanding
+  kind: 'OpenAI' // Azure OpenAI for GPT-4.1/5.1 vision models
   properties: {
     customSubDomainName: aiServicesName
     publicNetworkAccess: 'Enabled'

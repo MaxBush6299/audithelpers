@@ -2,7 +2,8 @@
 using '../main.bicep'
 
 param baseName = 'aicalib'
-param location = 'eastus'  // Recommended for Content Understanding
+param location = 'eastus'  // Recommended region for AI services
 param environment = 'dev'
 param storageSku = 'Standard_LRS'
 param aiServicesSku = 'S0'
+param documentIntelligenceSku = 'S0'
