@@ -45,6 +45,6 @@ def iter_images(slide) -> Iterable[Dict[str, Any]]:
             yield {
                 "type": "image",
                 "ext": ext,
-                "bytes": img.blob,  # raw bytes
+                "blob": img.blob,  # raw bytes (was "bytes", fixed to "blob" for multimodal_extract.py)
                 "shape_name": getattr(shp, "name", None),
             }

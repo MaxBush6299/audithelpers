@@ -30,12 +30,13 @@ import sys
 @dataclass
 class MultimodalConfig:
     """Configuration for the multimodal extraction pipeline."""
-    llm: LLMConfig                  # GPT-4.1 for text extraction from images
+    llm: LLMConfig                  # Primary LLM for text extraction from images
     di: Optional[DIConfig] = None   # Document Intelligence for embedded image OCR
     render_dpi: int = 150           # Slide render quality
     cache_rendered_slides: bool = True
     use_di_for_images: bool = True  # Whether to OCR embedded images with DI
     model_type: str = "gpt-4.1"     # Model type: "gpt-4.1" or "gpt-5.1"
+    fallback_llm: Optional[LLMConfig] = None  # Fallback LLM if primary returns empty
 
 
 def extract_native_text(slide, include_tables: bool = True) -> str:
@@ -225,6 +226,17 @@ def multimodal_extract(
                     use_max_completion_tokens=use_max_completion_tokens
                 )
                 
+                # Fallback to secondary LLM if primary returns empty
+                if not llm_text and config.fallback_llm:
+                    if verbose:
+                        print(f"[Pipeline]   Primary LLM returned empty, trying fallback...")
+                    llm_text = analyze_slide_multimodal(
+                        config.fallback_llm,
+                        slide_image_bytes,
+                        combined_extracted_text,
+                        use_max_completion_tokens=False  # GPT-4.1 uses max_tokens
+                    )
+                
                 if verbose:
                     preview = llm_text[:60].replace("\n", " ") if llm_text else "(empty)"
                     print(f"[Pipeline]   -> Extracted: {preview}...")
@@ -238,11 +250,13 @@ def multimodal_extract(
         
         results.append({
             "index": i,
+            "source_file": os.path.basename(pptx_path),
+            "source_index": i,
             "text": llm_text
         })
     
     output = {
-        "source_file": os.path.basename(pptx_path),
+        "source_files": [os.path.basename(pptx_path)],
         "total_slides": total_slides,
         "slides": results
     }
@@ -292,14 +306,25 @@ def quick_extract(
     load_dotenv()
     
     # LLM config based on model selection
+    fallback_llm = None
     if model == "gpt-5.1":
         llm_config = LLMConfig(
             endpoint=os.environ["AZURE_AI_GPT5_ENDPOINT"],
             api_key=os.environ["AZURE_AI_GPT5_API_KEY"],
             deployment=os.environ["GPT_5_1_DEPLOYMENT"]
         )
-        if verbose:
-            print(f"[Pipeline] Using GPT-5.1 model")
+        # Set up GPT-4.1 as fallback for GPT-5.1
+        if os.getenv("AZURE_AI_ENDPOINT") and os.getenv("AZURE_AI_API_KEY") and os.getenv("GPT_4_1_DEPLOYMENT"):
+            fallback_llm = LLMConfig(
+                endpoint=os.environ["AZURE_AI_ENDPOINT"],
+                api_key=os.environ["AZURE_AI_API_KEY"],
+                deployment=os.environ["GPT_4_1_DEPLOYMENT"]
+            )
+            if verbose:
+                print(f"[Pipeline] Using GPT-5.1 model with GPT-4.1 fallback")
+        else:
+            if verbose:
+                print(f"[Pipeline] Using GPT-5.1 model (no fallback configured)")
     else:
         llm_config = LLMConfig(
             endpoint=os.environ["AZURE_AI_ENDPOINT"],
@@ -321,7 +346,8 @@ def quick_extract(
         llm=llm_config,
         di=di_config,
         use_di_for_images=use_di and di_config is not None,
-        model_type=model
+        model_type=model,
+        fallback_llm=fallback_llm
     )
     
     return multimodal_extract(pptx_path, config, output_path, verbose)
@@ -342,3 +368,189 @@ def quick_extract_gpt5(
     - AZURE_AI_GPT5_ENDPOINT, AZURE_AI_GPT5_API_KEY, GPT_5_1_DEPLOYMENT
     """
     return quick_extract(pptx_path, output_path, verbose, use_di, model="gpt-5.1")
+
+
+def quick_extract_multi(
+    pptx_paths: List[str],
+    output_path: Optional[str] = None,
+    verbose: bool = True,
+    use_di: bool = True,
+    model: str = "gpt-4.1"
+) -> Dict[str, Any]:
+    """
+    Extract text from MULTIPLE PPTX files using multimodal LLM analysis.
+    
+    Processes each PPTX in order, combining results with continuous slide indexing.
+    Each slide includes source_file and source_index for traceability.
+    
+    Args:
+        pptx_paths: List of paths to PPTX files (processed in order)
+        output_path: Optional path to save combined output JSON
+        verbose: Print progress
+        use_di: Whether to use Document Intelligence for embedded image OCR
+        model: Which model to use - "gpt-4.1" or "gpt-5.1"
+    
+    Returns:
+        Combined JSON with all slides from all files:
+        {
+            "source_files": ["file1.pptx", "file2.pptx"],
+            "total_slides": 120,
+            "slides": [
+                {"index": 1, "source_file": "file1.pptx", "source_index": 1, "text": "..."},
+                {"index": 70, "source_file": "file2.pptx", "source_index": 1, "text": "..."}
+            ]
+        }
+    """
+    if not pptx_paths:
+        raise ValueError("At least one PPTX path is required")
+    
+    if len(pptx_paths) == 1:
+        # Single file - just use quick_extract
+        return quick_extract(pptx_paths[0], output_path, verbose, use_di, model)
+    
+    if verbose:
+        print(f"[Multi-PPTX] Processing {len(pptx_paths)} files...")
+    
+    all_slides = []
+    source_files = []
+    global_index = 0
+    
+    for file_num, pptx_path in enumerate(pptx_paths, start=1):
+        if verbose:
+            print(f"\n[Multi-PPTX] File {file_num}/{len(pptx_paths)}: {os.path.basename(pptx_path)}")
+        
+        # Extract from this file (without saving)
+        result = quick_extract(pptx_path, None, verbose, use_di, model)
+        
+        source_files.append(os.path.basename(pptx_path))
+        
+        # Re-index slides with global continuous numbering
+        for slide in result["slides"]:
+            global_index += 1
+            slide["index"] = global_index  # Global continuous index
+            # source_file and source_index are already set by multimodal_extract
+            all_slides.append(slide)
+    
+    combined_output = {
+        "source_files": source_files,
+        "total_slides": global_index,
+        "slides": all_slides
+    }
+    
+    # Save if requested
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(combined_output, f, indent=2, ensure_ascii=False)
+        if verbose:
+            print(f"\n[Multi-PPTX] Combined output saved to: {output_path}")
+    
+    if verbose:
+        print(f"[Multi-PPTX] Total: {global_index} slides from {len(source_files)} files")
+    
+    return combined_output
+
+
+# ==============================================================================
+# CLI Interface
+# ==============================================================================
+
+def main():
+    """CLI entry point for multimodal PPTX extraction."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Extract text from PPTX files using multimodal LLM analysis (native + DI OCR + GPT vision)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Single file extraction
+  python -m extractors.helpers.multimodal_extract evidence.pptx -o output.json
+  
+  # Multiple files (combined output)
+  python -m extractors.helpers.multimodal_extract file1.pptx file2.pptx file3.pptx -o combined.json
+  
+  # Use GPT-5.1 instead of GPT-4.1
+  python -m extractors.helpers.multimodal_extract evidence.pptx -o output.json --model gpt-5.1
+  
+  # Skip Document Intelligence OCR
+  python -m extractors.helpers.multimodal_extract evidence.pptx -o output.json --no-di
+
+Required environment variables:
+  AZURE_AI_ENDPOINT, AZURE_AI_API_KEY, GPT_4_1_DEPLOYMENT (for GPT-4.1)
+  AZURE_AI_GPT5_ENDPOINT, AZURE_AI_GPT5_API_KEY, GPT_5_1_DEPLOYMENT (for GPT-5.1)
+  AZURE_DI_ENDPOINT, AZURE_DI_KEY (optional, for embedded image OCR)
+"""
+    )
+    
+    parser.add_argument(
+        "pptx_files",
+        nargs="+",
+        help="One or more PPTX files to process"
+    )
+    parser.add_argument(
+        "-o", "--output",
+        help="Output JSON file path (default: prints to stdout)"
+    )
+    parser.add_argument(
+        "--model",
+        choices=["gpt-4.1", "gpt-5.1"],
+        default="gpt-4.1",
+        help="Which model to use (default: gpt-4.1)"
+    )
+    parser.add_argument(
+        "--no-di",
+        action="store_true",
+        help="Skip Document Intelligence OCR for embedded images"
+    )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Suppress progress output"
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate input files exist
+    from pathlib import Path
+    for pptx_path in args.pptx_files:
+        if not Path(pptx_path).exists():
+            print(f"Error: File not found: {pptx_path}", file=sys.stderr)
+            sys.exit(1)
+        if not pptx_path.lower().endswith(('.pptx', '.ppt')):
+            print(f"Warning: {pptx_path} may not be a PowerPoint file", file=sys.stderr)
+    
+    verbose = not args.quiet
+    use_di = not args.no_di
+    
+    try:
+        if len(args.pptx_files) == 1:
+            result = quick_extract(
+                args.pptx_files[0],
+                args.output,
+                verbose,
+                use_di,
+                args.model
+            )
+        else:
+            result = quick_extract_multi(
+                args.pptx_files,
+                args.output,
+                verbose,
+                use_di,
+                args.model
+            )
+        
+        # If no output file, print to stdout
+        if not args.output:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+    except KeyError as e:
+        print(f"Error: Missing environment variable: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -9,6 +9,7 @@ azure-ai-documentintelligence>=1.0.0
 
 # AI/LLM
 openai>=1.0.0
+agent-framework>=0.0.1
 
 # Image/PDF processing
 pymupdf>=1.24.0
