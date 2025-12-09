@@ -40,3 +40,6 @@ output id string = documentIntelligence.id
 
 @description('The resource name')
 output name string = documentIntelligence.name
+
+@description('The primary API key')
+output apiKey string = documentIntelligence.listKeys().key1

@@ -20,6 +20,7 @@ Example:
 """
 
 import argparse
+import io
 import json
 import os
 import sys
@@ -28,6 +29,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+# Fix Windows console encoding for Unicode characters
+# Only apply when stdout is a real terminal (not when piped/redirected)
+if sys.platform == 'win32' and sys.stdout.isatty():
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass  # Ignore if it fails
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -43,6 +53,8 @@ class PipelineConfig:
     use_di: bool = True
     skip_extraction: bool = False
     skip_evaluation: bool = False
+    generate_report: bool = False
+    report_options: Dict[str, bool] = field(default_factory=dict)
     verbose: bool = True
 
 
@@ -56,6 +68,7 @@ class PipelineResult:
     elements_with_evidence: int = 0
     evaluation_results: Dict[str, int] = field(default_factory=dict)
     output_files: Dict[str, str] = field(default_factory=dict)
+    report_path: Optional[str] = None
     error_message: Optional[str] = None
     elapsed_seconds: float = 0.0
 
@@ -68,7 +81,7 @@ def print_stage(stage_num: int, total: int, message: str):
 
 def print_progress(message: str, indent: int = 2):
     """Print a progress message with indentation."""
-    print(" " * indent + f"→ {message}")
+    print(" " * indent + f"-> {message}")
 
 
 def save_json(filepath: str, data: Any):
@@ -269,6 +282,56 @@ def run_stage4_evaluation(
     }
 
 
+def run_stage5_report(
+    config: PipelineConfig,
+    output_dir: Path,
+    evaluation_path: str,
+    matched_path: str
+) -> Dict[str, Any]:
+    """
+    Stage 5: Generate Word report from evaluation results.
+    
+    Returns:
+        Dict with 'report_path'
+    """
+    from reports.word_report import generate_word_report
+    
+    report_path = output_dir / "evaluation_report.docx"
+    
+    if config.verbose:
+        print_progress("Generating Word report...")
+    
+    # Build report options
+    options = {
+        'include_pass': config.report_options.get('include_pass', True),
+        'include_fail': config.report_options.get('include_fail', True),
+        'include_needs_more': config.report_options.get('include_needs_more', True),
+        'include_excerpts': config.report_options.get('include_excerpts', True),
+        'include_reasoning': True,
+        'include_description': True,
+        'max_excerpt_length': 500,
+    }
+    
+    # Get evidence file names for metadata
+    evidence_files = [Path(p).name for p in config.evidence_pptx]
+    
+    # Generate report
+    generate_word_report(
+        evaluation_results_path=evaluation_path,
+        output_path=str(report_path),
+        matched_evidence_path=matched_path,
+        evidence_files=evidence_files,
+        options=options
+    )
+    
+    if config.verbose:
+        print_progress(f"Report saved to: {report_path}")
+    
+    return {
+        "report_path": str(report_path)
+    }
+
+
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
     """
     Run the complete evidence evaluation pipeline.
@@ -293,7 +356,13 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     output_dir.mkdir(parents=True, exist_ok=True)
     
     result = PipelineResult(success=False)
-    total_stages = 4 if not config.skip_evaluation else 3
+    
+    # Calculate total stages based on options
+    total_stages = 3  # Base: Excel, PPTX, Matching
+    if not config.skip_evaluation:
+        total_stages += 1  # Evaluation
+    if config.generate_report and not config.skip_evaluation:
+        total_stages += 1  # Report
     
     try:
         # Stage 1: Excel Extraction
@@ -320,19 +389,32 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         result.output_files["matched"] = stage3["output_path"]
         
         # Stage 4: Evaluation
+        current_stage = 4
         if not config.skip_evaluation:
-            print_stage(4, total_stages, "Evaluating evidence with LLM")
+            print_stage(current_stage, total_stages, "Evaluating evidence with LLM")
             stage4 = run_stage4_evaluation(config, output_dir, stage3["output_path"])
             if stage4["statistics"]:
                 result.evaluation_results = stage4["statistics"]
                 result.output_files["evaluation"] = stage4["output_path"]
                 result.output_files["progress"] = stage4["progress_path"]
+            
+            # Stage 5: Report Generation
+            if config.generate_report and stage4["output_path"]:
+                current_stage += 1
+                print_stage(current_stage, total_stages, "Generating Word report")
+                stage5 = run_stage5_report(
+                    config, output_dir,
+                    stage4["output_path"],
+                    stage3["output_path"]
+                )
+                result.report_path = stage5["report_path"]
+                result.output_files["report"] = stage5["report_path"]
         
         result.success = True
         
     except Exception as e:
         result.error_message = str(e)
-        print(f"\n❌ Pipeline failed: {e}")
+        print(f"\n[ERROR] Pipeline failed: {e}")
         import traceback
         traceback.print_exc()
     
@@ -345,9 +427,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     print("=" * 60)
     
     if result.success:
-        print(f"✅ Pipeline completed successfully!")
+        print(f"[OK] Pipeline completed successfully!")
     else:
-        print(f"❌ Pipeline failed: {result.error_message}")
+        print(f"[ERROR] Pipeline failed: {result.error_message}")
     
     print(f"\nStatistics:")
     print(f"  Elements extracted:     {result.elements_count}")
@@ -366,6 +448,9 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     for name, path in result.output_files.items():
         print(f"  {name}: {path}")
     
+    if result.report_path:
+        print(f"\nWord Report: {result.report_path}")
+    
     minutes, seconds = divmod(result.elapsed_seconds, 60)
     print(f"\nTotal time: {int(minutes)}m {int(seconds)}s")
     print("=" * 60)
@@ -383,14 +468,18 @@ Examples:
   # Basic usage with single PPTX
   python run_pipeline.py --elements-xlsx calib.xlsx --evidence-pptx evidence.pptx
 
-  # Multiple PPTX files
+  # Multiple PPTX files with Word report
   python run_pipeline.py \\
       --elements-xlsx source-docs/calib_evidence.xlsx \\
       --evidence-pptx source-docs/evidence1-6.pptx source-docs/evidence7-15.pptx \\
-      --output-dir output/
+      --output-dir output/ \\
+      --report
 
   # Use GPT-5.1 model
   python run_pipeline.py --elements-xlsx calib.xlsx --evidence-pptx evidence.pptx --model gpt-5.1
+
+  # Generate report without passed elements
+  python run_pipeline.py --elements-xlsx calib.xlsx --evidence-pptx evidence.pptx --report --report-no-pass
 
   # Skip PPTX extraction (reuse existing evidence.json)
   python run_pipeline.py --elements-xlsx calib.xlsx --evidence-pptx dummy.pptx --skip-extraction
@@ -450,6 +539,24 @@ Required environment variables:
     )
     
     parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate Word report (.docx) after evaluation"
+    )
+    
+    parser.add_argument(
+        "--report-no-pass",
+        action="store_true",
+        help="Exclude passed elements from report"
+    )
+    
+    parser.add_argument(
+        "--report-no-excerpts",
+        action="store_true",
+        help="Exclude evidence text excerpts from report"
+    )
+    
+    parser.add_argument(
         "-q", "--quiet",
         action="store_true",
         help="Suppress verbose output"
@@ -469,6 +576,11 @@ Required environment variables:
                 sys.exit(1)
     
     # Build config
+    report_options = {
+        'include_pass': not args.report_no_pass,
+        'include_excerpts': not args.report_no_excerpts,
+    }
+    
     config = PipelineConfig(
         elements_xlsx=args.elements_xlsx,
         evidence_pptx=args.evidence_pptx,
@@ -477,6 +589,8 @@ Required environment variables:
         use_di=not args.no_di,
         skip_extraction=args.skip_extraction,
         skip_evaluation=args.skip_evaluation,
+        generate_report=args.report,
+        report_options=report_options,
         verbose=not args.quiet
     )
     

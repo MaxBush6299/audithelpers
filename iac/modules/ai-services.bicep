@@ -28,3 +28,4 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2023-10-01-preview' = 
 output name string = aiServices.name
 output endpoint string = aiServices.properties.endpoint
 output id string = aiServices.id
+output apiKey string = aiServices.listKeys().key1

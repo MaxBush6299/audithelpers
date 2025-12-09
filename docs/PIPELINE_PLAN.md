@@ -1,9 +1,9 @@
-# GM Calibration Evidence Evaluation Pipeline
+# PI Calibration Evidence Evaluation Pipeline
 ## Planning Document
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** December 8, 2025  
-**Status:** Planning
+**Status:** In Progress
 
 ---
 
@@ -13,7 +13,8 @@ This document outlines the plan to consolidate existing components into a unifie
 1. Accepts an Excel file containing PI calibration elements
 2. Accepts one or more PowerPoint files containing evidence slides
 3. Processes through extraction, matching, and LLM evaluation
-4. Produces a final evaluation report
+4. Produces a final evaluation report (Word/DOCX)
+5. Provides a Streamlit web UI for easy operation
 
 ---
 
@@ -329,22 +330,19 @@ GPT_5_1_DEPLOYMENT=...
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.2 Authentication Strategy: Microsoft Entra ID
+### 6.2 Authentication Strategy: Open Access (POC)
 
-**Approach:** Use Microsoft Entra ID (Azure AD) for authentication via Azure Container Apps Easy Auth.
+**Approach:** No authentication for POC deployment. Single-user access assumed.
 
-**Benefits:**
-- No custom auth code required
-- SSO with Microsoft 365 accounts
-- Role-based access control (RBAC) possible
-- Managed identity for backend Azure services (no API keys in code)
+**Rationale:**
+- POC/demo environment only
+- Single user expected at a time
+- Simplifies deployment and testing
+- No Entra ID app registration required
 
-**Implementation:**
-1. **Easy Auth Configuration** - Enable built-in authentication on Container App
-2. **Allowed Users** - Configure allowed tenant/users in Entra ID app registration
-3. **Managed Identity** - Use system-assigned managed identity for Azure OpenAI, Document Intelligence, and Blob Storage access
+**Future Consideration:** If multi-user or security is needed later, Easy Auth with Microsoft Entra ID can be added.
 
-### 6.3 Azure Container Apps Configuration
+### 6.3 Azure Container Apps Configuration (Simplified)
 
 **Container App Settings:**
 ```yaml
@@ -428,62 +426,557 @@ Grant the Container App's managed identity these roles:
 | Blob Storage | Storage Blob Data Contributor | Temporary file storage (optional) |
 | Key Vault | Key Vault Secrets User | Access secrets (if using Key Vault) |
 
-### 6.6 Streamlit Application Design (POC - Minimal)
+### 6.6 Streamlit Application Design (Full Implementation)
 
-**File:** `streamlit_app.py` (single file, ~100-150 lines)
+**Goal:** Complete single-page web UI for running the pipeline, viewing results, and downloading Word reports.
 
-**Goal:** Super simple frontend to demonstrate the pipeline capability.
+**Deployment:** Azure Container Apps or Azure Container Instances  
+**Access Model:** Single user at a time, open access (no authentication for POC)  
+**File:** `streamlit_app.py` (~300-400 lines)
 
-**Single Page Layout:**
+---
+
+#### 6.6.1 Page Layout Design
+
 ```
-┌─────────────────────────────────────────────────────┐
-│  🔍 GM Calibration Evidence Evaluator (POC)         │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  📁 Upload Files                                    │
-│  ┌───────────────────────────────────────────────┐  │
-│  │ [Excel File]     [Browse...]                  │  │
-│  │ [PPTX File(s)]   [Browse...]                  │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                     │
-│  [▶ Run Evaluation]                                 │
-│                                                     │
-│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45%              │
-│  Evaluating element 2.3...                          │
-│                                                     │
-│  📊 Results (live)                                  │
-│  ┌───────────────────────────────────────────────┐  │
-│  │ Element │ Status              │ Slides        │  │
-│  │─────────│─────────────────────│───────────────│  │
-│  │ 1.1     │ ✅ Pass             │ 2, 3          │  │
-│  │ 1.2     │ ❓ Needs Evidence   │ -             │  │
-│  │ 2.1     │ ✅ Pass             │ 6             │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                     │
-│  [📥 Download Results JSON]                         │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  📊 PI Calibration Evidence Evaluator                                          │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐  │
+│  │ CONFIGURATION                                                            │  │
+│  ├─────────────────────────────────────────────────────────────────────────┤  │
+│  │                                                                          │  │
+│  │  📁 Upload Files                           ⚙️ Settings                   │  │
+│  │  ┌──────────────────────────────────┐     ┌──────────────────────────┐  │  │
+│  │  │ Elements Excel:  [Browse...]     │     │ Model: [GPT-4.1      ▼]  │  │  │
+│  │  │ ✅ calib_evidence.xlsx           │     │                          │  │  │
+│  │  │                                  │     │                          │  │  │
+│  │  │ Evidence PPTX:   [Browse...]     │     │                          │  │  │
+│  │  │ ✅ evidence1-6.pptx              │     │                          │  │  │
+│  │  │ ✅ evidence7+.pptx               │     │                          │  │  │
+│  │  └──────────────────────────────────┘     └──────────────────────────┘  │  │
+│  │                                                                          │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐  │
+│  │ ELEMENT FILTER (Optional - Pre-Pipeline)                                 │  │
+│  ├─────────────────────────────────────────────────────────────────────────┤  │
+│  │                                                                          │  │
+│  │  Filter elements before running pipeline:                                │  │
+│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ ☑ 1.1 Process Monitoring                                          │  │  │
+│  │  │ ☑ 1.2 Data Collection                                             │  │  │
+│  │  │ ☐ 1.3 Quality Control (uncheck to skip)                           │  │  │
+│  │  │ ☑ 2.1 Calibration Verification                                    │  │  │
+│  │  │ ... (expandable list of all elements)                             │  │  │
+│  │  └───────────────────────────────────────────────────────────────────┘  │  │
+│  │  [Select All] [Deselect All]                                             │  │
+│  │                                                                          │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────┐ │
+│  │  [▶️ RUN FULL PIPELINE]                                                   │ │
+│  └──────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐  │
+│  │ PIPELINE PROGRESS                                                        │  │
+│  ├─────────────────────────────────────────────────────────────────────────┤  │
+│  │                                                                          │  │
+│  │  Stage: [Excel ✅] → [PPTX ✅] → [Matching ✅] → [Evaluation 🔄]         │  │
+│  │                                                                          │  │
+│  │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 67%                         │  │
+│  │  Evaluating element 2.3 (37 of 55)...                                    │  │
+│  │                                                                          │  │
+│  │  📋 Recent Activity:                                                     │  │
+│  │  • ✅ Element 2.2 evaluated: PASS (slides 12, 13)                        │  │
+│  │  • ✅ Element 2.1 evaluated: PASS (slide 11)                             │  │
+│  │  • ✅ Element 1.5 evaluated: NEEDS_MORE (no matching slides)             │  │
+│  │                                                                          │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐  │
+│  │ EVALUATION RESULTS                                                       │  │
+│  ├─────────────────────────────────────────────────────────────────────────┤  │
+│  │                                                                          │  │
+│  │  Summary: ✅ 42 Pass | ⚠️ 8 Needs More | ❌ 5 Fail | Total: 55           │  │
+│  │                                                                          │  │
+│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ Element  │ Status     │ Slides        │ Summary                   │  │  │
+│  │  │──────────│────────────│───────────────│───────────────────────────│  │  │
+│  │  │ 1.1      │ ✅ Pass    │ 2, 3          │ Evidence shows process... │  │  │
+│  │  │ 1.2      │ ✅ Pass    │ 4             │ Data collection method... │  │  │
+│  │  │ 1.3      │ ⚠️ Needs   │ -             │ No matching evidence...   │  │  │
+│  │  │ 2.1      │ ✅ Pass    │ 6, 7          │ Calibration verified...   │  │  │
+│  │  │ 2.2      │ ❌ Fail    │ 8             │ Evidence incomplete...    │  │  │
+│  │  │ ...      │ ...        │ ...           │ ...                       │  │  │
+│  │  └───────────────────────────────────────────────────────────────────┘  │  │
+│  │                                                                          │  │
+│  │  [Expand Row to See Full Reasoning + Evidence Text]                      │  │
+│  │                                                                          │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐  │
+│  │ DOWNLOAD REPORT                                                          │  │
+│  ├─────────────────────────────────────────────────────────────────────────┤  │
+│  │                                                                          │  │
+│  │  Report Options:                                                         │  │
+│  │  ☑ Include passed elements                                               │  │
+│  │  ☑ Include failed elements                                               │  │
+│  │  ☑ Include needs-more elements                                           │  │
+│  │  ☑ Include evidence text excerpts                                        │  │
+│  │                                                                          │  │
+│  │  [📥 Download Word Report (.docx)]  [📥 Download JSON Results]           │  │
+│  │                                                                          │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Features (POC only):**
-- Single page (no multi-page navigation)
-- File uploaders for Excel + PPTX
-- One "Run" button
-- Progress bar + current element text
-- Simple results table (st.dataframe)
-- Download button for JSON results
+---
 
-**Not Included (Future):**
-- ❌ Configuration options
-- ❌ Model selection
-- ❌ Charts/visualizations  
-- ❌ Filtering/sorting
-- ❌ Expandable details
-- ❌ Excel/PDF report download
+#### 6.6.2 Component Breakdown
 
-**Estimated Effort:** 4-6 hours (down from 16-24)
+| Component | Streamlit Widget | Purpose |
+|-----------|------------------|---------|
+| Excel Upload | `st.file_uploader(type=['xlsx'])` | Single element file |
+| PPTX Upload | `st.file_uploader(type=['pptx'], accept_multiple_files=True)` | One or more evidence files |
+| Model Dropdown | `st.selectbox(["GPT-4.1", "GPT-5.1"])` | Select LLM model |
+| Element Filter | `st.multiselect()` or checkbox list | Pre-filter elements |
+| Run Button | `st.button("Run Full Pipeline")` | Start processing |
+| Stage Progress | `st.columns()` + status icons | Visual pipeline stages |
+| Progress Bar | `st.progress()` + `st.text()` | Real-time progress |
+| Activity Log | `st.container()` with updates | Recent evaluation results |
+| Results Table | `st.dataframe()` or `st.data_editor()` | Sortable, filterable results |
+| Expandable Details | `st.expander()` | Full reasoning per element |
+| Summary Stats | `st.metric()` columns | Pass/Fail/NeedMore counts |
+| Report Options | `st.checkbox()` group | Customize report content |
+| Download Buttons | `st.download_button()` | Word/JSON downloads |
 
-### 6.7 Progress Monitoring (Real-time Updates)
+---
+
+#### 6.6.3 State Management
+
+```python
+# Session state keys
+st.session_state.keys = {
+    "pipeline_status": "idle" | "running" | "completed" | "error",
+    "current_stage": 1-4,
+    "progress_percent": 0-100,
+    "current_element": "2.3",
+    "results": [],           # List of evaluation results
+    "activity_log": [],      # Recent activity for display
+    "selected_elements": [], # Pre-filtered element IDs
+    "uploaded_excel": None,  # File buffer
+    "uploaded_pptx": [],     # List of file buffers
+    "selected_model": "GPT-4.1",
+}
+```
+
+---
+
+#### 6.6.4 Pipeline Execution Flow
+
+```python
+def run_pipeline():
+    # 1. Save uploaded files to temp directory
+    temp_dir = tempfile.mkdtemp()
+    excel_path = save_uploaded_file(st.session_state.uploaded_excel, temp_dir)
+    pptx_paths = [save_uploaded_file(f, temp_dir) for f in st.session_state.uploaded_pptx]
+    
+    # 2. Run pipeline stages sequentially
+    st.session_state.pipeline_status = "running"
+    
+    # Stage 1: Excel extraction
+    st.session_state.current_stage = 1
+    elements = extract_elements(excel_path, filter=st.session_state.selected_elements)
+    
+    # Stage 2: PPTX extraction
+    st.session_state.current_stage = 2
+    evidence = extract_evidence(pptx_paths, model=st.session_state.selected_model)
+    
+    # Stage 3: Matching
+    st.session_state.current_stage = 3
+    matches = match_evidence(elements, evidence)
+    
+    # Stage 4: Evaluation (with progress updates)
+    st.session_state.current_stage = 4
+    for i, element in enumerate(matches):
+        result = evaluate_element(element, model=st.session_state.selected_model)
+        st.session_state.results.append(result)
+        st.session_state.progress_percent = (i + 1) / len(matches) * 100
+        st.session_state.activity_log.insert(0, format_activity(result))
+    
+    st.session_state.pipeline_status = "completed"
+```
+
+---
+
+#### 6.6.5 Live Progress Monitoring
+
+The pipeline writes progress to `evaluation_progress.json`. Streamlit polls this file:
+
+```python
+progress_container = st.empty()
+
+def update_progress_display():
+    """Poll progress file and update UI"""
+    while st.session_state.pipeline_status == "running":
+        progress = load_json("evaluation_progress.json")
+        
+        with progress_container.container():
+            # Stage indicators
+            cols = st.columns(4)
+            stages = ["Excel", "PPTX", "Matching", "Evaluation"]
+            for i, (col, stage) in enumerate(zip(cols, stages)):
+                if i < progress["current_stage"]:
+                    col.success(f"✅ {stage}")
+                elif i == progress["current_stage"]:
+                    col.info(f"🔄 {stage}")
+                else:
+                    col.write(f"⬜ {stage}")
+            
+            # Progress bar
+            st.progress(progress["completed"] / progress["total"])
+            st.text(f"Evaluating element {progress['current_element']} "
+                   f"({progress['completed']} of {progress['total']})...")
+            
+            # Recent activity
+            st.subheader("📋 Recent Activity")
+            for activity in progress["recent_results"][:5]:
+                icon = {"PASS": "✅", "FAIL": "❌", "NEEDS_MORE": "⚠️"}[activity["verdict"]]
+                st.write(f"{icon} Element {activity['element_id']}: {activity['verdict']}")
+        
+        time.sleep(1)  # Poll every second
+```
+
+**Estimated Effort:** 12-16 hours
+
+### 6.7 Word Report Generator (DOCX)
+
+**Goal:** Generate professional Word document with evaluation summary and per-element breakdown.
+
+**Output Format:** `.docx` (Microsoft Word)  
+**Library:** `python-docx`
+
+---
+
+#### 6.7.1 Report Structure
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│           PI CALIBRATION EVIDENCE EVALUATION REPORT              │
+│                                                                  │
+│  Generated: December 8, 2025 3:45 PM                             │
+│  Model: GPT-4.1                                                  │
+│  Evidence Files: evidence1-6.pptx, evidence7+.pptx               │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  EXECUTIVE SUMMARY                                               │
+│  ─────────────────                                               │
+│                                                                  │
+│  Total Elements Evaluated: 55                                    │
+│                                                                  │
+│    ✅ Pass:        42 (76.4%)                                    │
+│    ⚠️ Needs More:   8 (14.5%)                                    │
+│    ❌ Fail:         5 (9.1%)                                     │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │          [Summary Bar Chart - Pass/Fail/NeedMore]          │  │
+│  │          ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░▒▒▒                     │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ELEMENTS REQUIRING ATTENTION                                    │
+│  ────────────────────────────                                    │
+│                                                                  │
+│  ❌ FAIL (5 elements)                                            │
+│  • 2.2 - Calibration Documentation                               │
+│  • 3.1 - Process Verification                                    │
+│  • 4.3 - Quality Assurance                                       │
+│  • 5.2 - Data Integrity                                          │
+│  • 6.1 - System Validation                                       │
+│                                                                  │
+│  ⚠️ NEEDS MORE EVIDENCE (8 elements)                             │
+│  • 1.3 - Quality Control                                         │
+│  • 2.5 - Equipment Calibration                                   │
+│  • ...                                                           │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  DETAILED ELEMENT BREAKDOWN                                      │
+│  ─────────────────────────                                       │
+│                                                                  │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  Element 1.1: Process Monitoring                                 │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│                                                                  │
+│  Status: ✅ PASS                                                 │
+│  Matching Slides: 2, 3 (from evidence1-6.pptx)                   │
+│                                                                  │
+│  Element Description:                                            │
+│  "The calibration process shall include continuous monitoring    │
+│   of key process parameters including temperature, pressure,     │
+│   and flow rate."                                                │
+│                                                                  │
+│  Evaluation Reasoning:                                           │
+│  The evidence slides demonstrate comprehensive process           │
+│  monitoring capabilities. Slide 2 shows the monitoring           │
+│  dashboard with real-time parameter tracking. Slide 3 provides   │
+│  historical data analysis showing consistent monitoring over     │
+│  the evaluation period.                                          │
+│                                                                  │
+│  Evidence Text Excerpts:                                         │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ From Slide 2:                                               │  │
+│  │ "Process Monitoring Dashboard - Real-time tracking of       │  │
+│  │  temperature (±0.5°C), pressure (±1 PSI), and flow rate    │  │
+│  │  (±0.1 L/min). All parameters logged at 1-second           │  │
+│  │  intervals..."                                              │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │ From Slide 3:                                               │  │
+│  │ "Historical Analysis - 6-month monitoring data shows        │  │
+│  │  99.7% uptime with automatic alerts triggered for any      │  │
+│  │  parameter deviation..."                                    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  Element 1.2: Data Collection                                    │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│                                                                  │
+│  Status: ✅ PASS                                                 │
+│  ...                                                             │
+│                                                                  │
+│  [Continues for each element...]                                 │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### 6.7.2 Report Content Options (User-Configurable)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| Include Passed | ✅ Yes | Include elements with PASS verdict |
+| Include Failed | ✅ Yes | Include elements with FAIL verdict |
+| Include Needs More | ✅ Yes | Include elements with NEEDS_MORE verdict |
+| Include Evidence Excerpts | ✅ Yes | Include text excerpts from matching slides |
+| Include Reasoning | ✅ Yes | Include LLM evaluation reasoning |
+| Include Element Description | ✅ Yes | Include original element text |
+
+---
+
+#### 6.7.3 Report Generator Implementation
+
+```python
+# reports/word_report.py
+
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.style import WD_STYLE_TYPE
+from datetime import datetime
+from typing import List, Dict, Optional
+
+class ReportGenerator:
+    """Generate Word document evaluation report."""
+    
+    def __init__(self, options: dict = None):
+        self.options = options or {
+            "include_pass": True,
+            "include_fail": True,
+            "include_needs_more": True,
+            "include_excerpts": True,
+            "include_reasoning": True,
+            "include_description": True,
+        }
+        self.doc = Document()
+        self._setup_styles()
+    
+    def _setup_styles(self):
+        """Configure document styles."""
+        # Title style
+        title_style = self.doc.styles['Title']
+        title_style.font.size = Pt(24)
+        title_style.font.bold = True
+        
+        # Heading styles
+        h1 = self.doc.styles['Heading 1']
+        h1.font.size = Pt(16)
+        h1.font.color.rgb = RGBColor(0, 0, 0)
+    
+    def generate(
+        self, 
+        results: List[Dict],
+        model: str,
+        evidence_files: List[str],
+        output_path: str
+    ) -> str:
+        """Generate complete report."""
+        
+        # Title page
+        self._add_title_page(model, evidence_files)
+        
+        # Executive summary
+        self._add_executive_summary(results)
+        
+        # Elements requiring attention
+        self._add_attention_section(results)
+        
+        # Detailed breakdown
+        self._add_detailed_breakdown(results)
+        
+        # Save document
+        self.doc.save(output_path)
+        return output_path
+    
+    def _add_title_page(self, model: str, evidence_files: List[str]):
+        """Add report title and metadata."""
+        self.doc.add_heading('PI Calibration Evidence Evaluation Report', 0)
+        
+        self.doc.add_paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y %I:%M %p')}")
+        self.doc.add_paragraph(f"Model: {model}")
+        self.doc.add_paragraph(f"Evidence Files: {', '.join(evidence_files)}")
+        self.doc.add_page_break()
+    
+    def _add_executive_summary(self, results: List[Dict]):
+        """Add summary statistics."""
+        self.doc.add_heading('Executive Summary', level=1)
+        
+        # Calculate counts
+        pass_count = sum(1 for r in results if r['verdict'] == 'PASS')
+        fail_count = sum(1 for r in results if r['verdict'] == 'FAIL')
+        needs_count = sum(1 for r in results if r['verdict'] == 'NEEDS_MORE')
+        total = len(results)
+        
+        self.doc.add_paragraph(f"Total Elements Evaluated: {total}")
+        self.doc.add_paragraph(f"✅ Pass: {pass_count} ({pass_count/total*100:.1f}%)")
+        self.doc.add_paragraph(f"⚠️ Needs More: {needs_count} ({needs_count/total*100:.1f}%)")
+        self.doc.add_paragraph(f"❌ Fail: {fail_count} ({fail_count/total*100:.1f}%)")
+    
+    def _add_attention_section(self, results: List[Dict]):
+        """Add section highlighting failed and needs-more elements."""
+        self.doc.add_heading('Elements Requiring Attention', level=1)
+        
+        # Failed elements
+        failed = [r for r in results if r['verdict'] == 'FAIL']
+        if failed:
+            self.doc.add_heading('❌ FAIL', level=2)
+            for r in failed:
+                self.doc.add_paragraph(f"• {r['element_id']} - {r.get('element_title', '')}")
+        
+        # Needs more elements
+        needs_more = [r for r in results if r['verdict'] == 'NEEDS_MORE']
+        if needs_more:
+            self.doc.add_heading('⚠️ NEEDS MORE EVIDENCE', level=2)
+            for r in needs_more:
+                self.doc.add_paragraph(f"• {r['element_id']} - {r.get('element_title', '')}")
+    
+    def _add_detailed_breakdown(self, results: List[Dict]):
+        """Add per-element detailed breakdown."""
+        self.doc.add_heading('Detailed Element Breakdown', level=1)
+        
+        for result in results:
+            # Skip based on options
+            if result['verdict'] == 'PASS' and not self.options['include_pass']:
+                continue
+            if result['verdict'] == 'FAIL' and not self.options['include_fail']:
+                continue
+            if result['verdict'] == 'NEEDS_MORE' and not self.options['include_needs_more']:
+                continue
+            
+            self._add_element_section(result)
+    
+    def _add_element_section(self, result: Dict):
+        """Add single element breakdown."""
+        # Element header
+        self.doc.add_heading(
+            f"Element {result['element_id']}: {result.get('element_title', '')}",
+            level=2
+        )
+        
+        # Status with icon
+        icon = {"PASS": "✅", "FAIL": "❌", "NEEDS_MORE": "⚠️"}[result['verdict']]
+        self.doc.add_paragraph(f"Status: {icon} {result['verdict']}")
+        
+        # Matching slides
+        if result.get('matching_slides'):
+            slides_text = ", ".join(str(s['slide_index']) for s in result['matching_slides'])
+            sources = ", ".join(set(s['source_file'] for s in result['matching_slides']))
+            self.doc.add_paragraph(f"Matching Slides: {slides_text} (from {sources})")
+        
+        # Element description
+        if self.options['include_description'] and result.get('element_text'):
+            self.doc.add_heading('Element Description:', level=3)
+            self.doc.add_paragraph(result['element_text'])
+        
+        # Evaluation reasoning
+        if self.options['include_reasoning'] and result.get('reasoning'):
+            self.doc.add_heading('Evaluation Reasoning:', level=3)
+            self.doc.add_paragraph(result['reasoning'])
+        
+        # Evidence excerpts
+        if self.options['include_excerpts'] and result.get('evidence_excerpts'):
+            self.doc.add_heading('Evidence Text Excerpts:', level=3)
+            for excerpt in result['evidence_excerpts']:
+                p = self.doc.add_paragraph()
+                p.add_run(f"From Slide {excerpt['slide_index']}:").bold = True
+                self.doc.add_paragraph(excerpt['text'][:500] + "..." if len(excerpt['text']) > 500 else excerpt['text'])
+```
+
+---
+
+#### 6.7.4 Integration with Streamlit
+
+```python
+# In streamlit_app.py
+
+from reports.word_report import ReportGenerator
+import io
+
+def generate_report_download():
+    """Generate Word report and create download button."""
+    
+    # Get report options from UI
+    options = {
+        "include_pass": st.session_state.report_include_pass,
+        "include_fail": st.session_state.report_include_fail,
+        "include_needs_more": st.session_state.report_include_needs,
+        "include_excerpts": st.session_state.report_include_excerpts,
+        "include_reasoning": True,
+        "include_description": True,
+    }
+    
+    # Generate report to buffer
+    generator = ReportGenerator(options)
+    buffer = io.BytesIO()
+    generator.generate(
+        results=st.session_state.results,
+        model=st.session_state.selected_model,
+        evidence_files=[f.name for f in st.session_state.uploaded_pptx],
+        output_path=buffer
+    )
+    buffer.seek(0)
+    
+    # Create download button
+    st.download_button(
+        label="📥 Download Word Report (.docx)",
+        data=buffer,
+        file_name=f"calibration_report_{datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+```
+
+**Estimated Effort:** 8-12 hours
+
+---
+
+### 6.8 Progress Monitoring (Real-time Updates)
 
 **Approach:** Poll `evaluation_progress.json` during pipeline execution
 
@@ -560,39 +1053,38 @@ jobs:
             --image ${{ vars.ACR_NAME }}.azurecr.io/calibration-app:${{ github.sha }}
 ```
 
-### 6.10 Security Considerations
+### 6.10 Security Considerations (POC)
 
 1. **Authentication**
-   - Microsoft Entra ID via Easy Auth (no custom auth code)
-   - Restrict to specific tenant/security groups
+   - Open access (no authentication) for POC
+   - Single user assumed at a time
+   - Future: Add Easy Auth with Microsoft Entra ID if needed
 
 2. **Secrets Management**
-   - Use Azure Key Vault for sensitive configuration
-   - Managed Identity for service-to-service auth
-   - No API keys in environment variables or code
+   - Environment variables for API keys (acceptable for POC)
+   - Future: Use Azure Key Vault + Managed Identity
 
 3. **Network Security**
-   - Container App ingress can be restricted to specific IPs
-   - Consider VNet integration for enterprise deployment
-   - All Azure service calls use private endpoints (optional)
+   - Public ingress (standard for POC)
+   - Future: IP restrictions or VNet integration
 
 4. **Data Handling**
    - Uploaded files processed in-memory where possible
    - Temporary files cleaned up after processing
    - No persistent storage of customer data (stateless)
 
-### 6.11 Deployment Effort Estimate
+### 6.11 Deployment Effort Estimate (Updated)
 
 | Component | Effort |
 |-----------|--------|
 | Dockerfile + container setup | 4-6 hours |
-| Streamlit app (5 pages) | 16-24 hours |
-| Bicep IaC (Container Apps) | 4-8 hours |
-| Entra ID / Easy Auth config | 2-4 hours |
+| Streamlit app (single page with all features) | 12-16 hours |
+| Word Report Generator | 8-12 hours |
+| Bicep IaC (Container Apps) | 4-6 hours |
 | Managed Identity setup | 2-3 hours |
-| CI/CD pipeline | 2-4 hours |
-| Testing & debugging | 8-12 hours |
-| **Deployment TOTAL** | **38-61 hours** |
+| CI/CD pipeline (optional) | 2-4 hours |
+| Testing & debugging | 6-10 hours |
+| **Deployment TOTAL** | **38-57 hours** |
 
 ---
 
@@ -637,130 +1129,130 @@ jobs:
 
 ## 9. Estimated Total Effort
 
-### 9.1 Core Pipeline Development
+### 9.1 Core Pipeline Development (✅ COMPLETED)
 
-| Component | Effort |
-|-----------|--------|
-| Stage 1 (Excel CLI) | 2-4 hours |
-| Stage 2 (Multi-PPTX) | 4-6 hours |
-| Stage 3 (Matching updates) | 2-3 hours |
-| Stage 4 (Evaluation) | 0 hours (done) |
-| Stage 5 (Report Generation) | 8-16 hours |
-| Pipeline Orchestrator | 8-12 hours |
-| Testing | 4-8 hours |
-| Documentation | 2-4 hours |
-| **Pipeline TOTAL** | **30-53 hours** |
+| Component | Status | Effort |
+|-----------|--------|--------|
+| Stage 1 (Excel CLI) | ✅ Done | 2-4 hours |
+| Stage 2 (Multi-PPTX) | ✅ Done | 4-6 hours |
+| Stage 3 (Matching updates) | ✅ Done | 2-3 hours |
+| Stage 4 (Evaluation) | ✅ Done | 0 hours |
+| Pipeline Orchestrator | ✅ Done | 8-12 hours |
+| Testing | ✅ Done | 4-8 hours |
+| Documentation | ✅ Done | 2-4 hours |
+| **Pipeline TOTAL** | **COMPLETE** | **22-37 hours** |
 
-### 9.2 Azure Deployment & Streamlit Frontend (POC)
+### 9.2 Streamlit Frontend & Report Generator
 
-| Component | Effort |
-|-----------|--------|
-| Dockerfile + container setup | 4-6 hours |
-| Streamlit app (single page POC) | 4-6 hours |
-| Bicep IaC (Container Apps) | 4-8 hours |
-| Entra ID / Easy Auth config | 2-4 hours |
-| Managed Identity setup | 2-3 hours |
-| CI/CD pipeline | 2-4 hours |
-| Testing & debugging | 4-6 hours |
-| **Deployment TOTAL** | **22-37 hours** |
+| Component | Status | Effort |
+|-----------|--------|--------|
+| Streamlit app (full features) | 🔲 Pending | 12-16 hours |
+| Word Report Generator | 🔲 Pending | 8-12 hours |
+| Frontend Testing | 🔲 Pending | 4-6 hours |
+| **Frontend TOTAL** | **Pending** | **24-34 hours** |
 
-### 9.3 Grand Total
+### 9.3 Azure Deployment
 
-| Phase | Effort |
-|-------|--------|
-| Core Pipeline | 30-53 hours |
-| Azure Deployment + Streamlit (POC) | 22-37 hours |
-| **GRAND TOTAL** | **52-90 hours** |
+| Component | Status | Effort |
+|-----------|--------|--------|
+| Dockerfile + container setup | 🔲 Pending | 4-6 hours |
+| Bicep IaC (Container Apps) | 🔲 Pending | 4-6 hours |
+| Managed Identity setup | 🔲 Pending | 2-3 hours |
+| CI/CD pipeline (optional) | 🔲 Pending | 2-4 hours |
+| Deployment Testing | 🔲 Pending | 4-6 hours |
+| **Deployment TOTAL** | **Pending** | **16-25 hours** |
+
+### 9.4 Grand Total
+
+| Phase | Status | Effort |
+|-------|--------|--------|
+| Core Pipeline | ✅ Complete | 22-37 hours |
+| Streamlit + Report | 🔲 Pending | 24-34 hours |
+| Azure Deployment | 🔲 Pending | 16-25 hours |
+| **GRAND TOTAL** | | **62-96 hours** |
 
 ---
 
 ## 10. Recommended Implementation Order
 
-### Phase 1: Core Pipeline (Priority)
-- Pipeline orchestrator (`run_pipeline.py`)
-- Multi-PPTX support
-- Basic Excel report generation
+### Phase 1: Core Pipeline ✅ COMPLETED
+- ✅ Pipeline orchestrator (`run_pipeline.py`)
+- ✅ Multi-PPTX support with source tracking
+- ✅ Evidence-element matching
+- ✅ LLM evaluation with progress
 
-### Phase 2: Containerization
-- Dockerfile with LibreOffice
-- Local container testing
-- Verify pipeline works in container
+### Phase 2: Word Report Generator (NEXT)
+1. Create `reports/word_report.py` module
+2. Implement `ReportGenerator` class using `python-docx`
+3. Add title page, executive summary, attention section
+4. Add per-element breakdown with excerpts
+5. Test with existing evaluation output
+6. Integrate with CLI (`run_pipeline.py --report-format docx`)
 
-### Phase 3: Azure Infrastructure
-- Bicep templates for Container Apps
-- Azure Container Registry setup
-- Managed Identity configuration
+### Phase 3: Streamlit Frontend
+1. Create `streamlit_app.py` skeleton
+2. Build file upload section (Excel + PPTX)
+3. Add model selection dropdown
+4. Implement element filter (multiselect after Excel upload)
+5. Add "Run Pipeline" button with subprocess/threading
+6. Build progress monitoring (poll JSON file)
+7. Create results table with expandable details
+8. Add report options and download buttons
+9. Test locally end-to-end
 
-### Phase 4: Streamlit Frontend
-- Basic upload + processing flow
-- Progress visualization
-- Results dashboard
+### Phase 4: Containerization
+1. Create `Dockerfile` with LibreOffice for slide rendering
+2. Create `.dockerignore`
+3. Test container build locally
+4. Verify pipeline works in container environment
+5. Test with sample files
 
-### Phase 5: Authentication & Security
-- Entra ID app registration
-- Easy Auth configuration
-- Role-based access (if needed)
+### Phase 5: Azure Deployment
+1. Create Azure Container Registry (ACR)
+2. Push container image to ACR
+3. Create Container Apps Environment
+4. Deploy Container App with public ingress
+5. Configure environment variables (API keys)
+6. Test end-to-end in Azure
 
-### Phase 6: CI/CD & Polish
-- GitHub Actions workflow
-- Automated deployments
-- Monitoring and logging
+### Phase 6: Polish & CI/CD (Optional)
+- GitHub Actions for automated builds
+- Health checks and monitoring
+- Error logging to Application Insights
 
 ---
 
-## 11. Open Questions
+## 11. Open Questions (Resolved & Remaining)
 
-### Pipeline Questions
+### Resolved Questions ✅
 
-1. **Report Format Priority:** Which format is most important for calibrators? (Excel recommended for initial version)
+| Question | Decision |
+|----------|----------|
+| Report Format | Word/DOCX with text excerpts (no screenshots) |
+| Multi-PPTX Handling | Continuous sequence with source tracking |
+| Error Tolerance | Continue with remaining files |
+| Model Selection | User selects from dropdown (GPT-4.1, GPT-5.1) |
+| Authentication | Open access for POC (no auth) |
+| Concurrent Users | Single user at a time |
+| Scaling | Single replica sufficient for POC |
 
-2. **Multi-PPTX Handling:** Should evidence from multiple files be treated as:
-   - One continuous sequence (current assumption)
-   - Separate evidence sets per file
+### Remaining Questions ❓
 
-3. **Error Tolerance:** If one PPTX fails to process, should the pipeline:
-   - Abort entirely
-   - Continue with remaining files (recommended)
-
-4. **Intermediate Files:** Should intermediate JSON files be:
-   - Kept for debugging
-   - Cleaned up after successful completion
-   - User-configurable
-
-5. **Model Selection:** Should the pipeline:
-   - Use same model for extraction and evaluation
-   - Allow different models per stage
-
-### Deployment Questions
-
-6. **Tenant Restriction:** Should access be limited to:
-   - Single tenant (GM employees only)
-   - Specific security groups
-   - Anyone with Microsoft account (not recommended)
-
-7. **File Size Limits:** What are acceptable limits for:
+1. **File Size Limits:** What are acceptable limits for:
    - Excel file size (recommended: 10 MB)
    - PPTX file size (recommended: 100 MB per file)
    - Total upload size (recommended: 500 MB)
 
-8. **Processing Timeout:** Large evidence sets may take 30+ minutes. Should we:
-   - Use async processing with job status polling
-   - Extend HTTP request timeout
-   - Implement background job queue
+2. **Processing Timeout:** Large evidence sets may take 30+ minutes.
+   - Current approach: Synchronous processing with progress polling
+   - May need async job queue for very large files
 
-9. **Data Retention:** How long should results be kept?
-   - Session only (cleared on logout)
-   - 24 hours
-   - User-configurable
+3. **Data Retention:** Session-only (cleared when user refreshes) for POC.
+   - Future: Consider persistent storage if needed
 
-10. **Scaling Strategy:** Expected concurrent users?
-    - Low volume: Single replica sufficient
-    - High volume: Configure autoscaling rules
-
-11. **LibreOffice vs Alternative:** Container uses LibreOffice for slide rendering. Consider:
-    - LibreOffice (current plan, open source)
-    - Azure-hosted rendering service (if available)
-    - Pre-render slides client-side before upload
+4. **LibreOffice vs Alternative:** Container uses LibreOffice for slide rendering.
+   - LibreOffice selected (open source, no licensing)
+   - Alternative: Azure-hosted rendering service (if available)
 
 ---
 
@@ -768,37 +1260,44 @@ jobs:
 
 ```
 ai-calibration/
-├── run_pipeline.py              # NEW: Main entry point
-├── streamlit_app.py             # NEW: Streamlit frontend (single file POC)
-├── evaluate_evidence.py         # Existing: Stage 4
-├── match_evidence_to_elements.py # Existing: Stage 3
-├── Dockerfile                   # NEW: Container definition
-├── .dockerignore                # NEW: Docker ignore file
+├── run_pipeline.py              # Main CLI entry point
+├── streamlit_app.py             # Streamlit frontend
+├── Dockerfile                   # Container definition
+├── .dockerignore                # Docker ignore file
+├── matching/
+│   ├── __init__.py
+│   └── match_evidence.py        # Evidence-element matching
+├── evaluation/
+│   ├── __init__.py
+│   └── evaluate.py              # LLM evaluation CLI
+├── utils/
+│   ├── __init__.py
+│   ├── element_extract.py       # Regex patterns
+│   └── slide_to_markdown.py     # Slide text utilities
+├── reports/                     # NEW
+│   ├── __init__.py
+│   └── word_report.py           # Word document generator
 ├── agents/
 │   ├── __init__.py
-│   └── evidence_evaluator.py    # Existing: LLM agent
+│   └── evidence_evaluator.py    # LLM agent
 ├── extractors/
 │   ├── __init__.py
-│   ├── ppt_extract.py           # Existing: Basic PPTX
-│   ├── xlsx_extract.py          # Existing: Excel parsing
+│   ├── ppt_extract.py           # Basic PPTX
+│   ├── xlsx_extract.py          # Excel parsing
 │   └── helpers/
-│       ├── multimodal_extract.py # Existing: Full PPTX pipeline
+│       ├── multimodal_extract.py # Full PPTX pipeline
 │       ├── llm_helpers.py
-│       └── ...
-├── helper/
-│   └── element_extract.py       # Existing: Regex patterns
-├── reports/                     # NEW: Report generation
-│   ├── __init__.py
-│   └── excel_report.py
+│       ├── pptx_helpers.py
+│       └── di_helpers.py
+├── tests/
+│   └── ...                      # Test files
 ├── iac/                         # Infrastructure as Code
-│   ├── main.bicep               # Existing (Document Intelligence)
-│   ├── container-app.bicep      # NEW: Container App
-│   ├── acr.bicep                # NEW: Container Registry
-│   ├── identity.bicep           # NEW: Managed Identity
-│   └── parameters.json          # NEW: Environment params
+│   ├── main.bicep               # Document Intelligence
+│   ├── container-app.bicep      # Container App
+│   └── parameters.json          # Environment params
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml           # NEW: CI/CD pipeline
+│       └── deploy.yml           # CI/CD pipeline (optional)
 ├── source-docs/                 # Sample data & outputs
 ├── docs/
 │   └── PIPELINE_PLAN.md         # This document
@@ -833,12 +1332,6 @@ AZURE_AI_GPT5_API_KEY=<key>
 GPT_5_1_DEPLOYMENT=<deployment-name>
 
 # ============================================
-# Azure Blob Storage (Optional - for file staging)
-# ============================================
-AZURE_STORAGE_ACCOUNT=<storage-account-name>
-AZURE_STORAGE_CONTAINER=calibration-files
-
-# ============================================
 # Streamlit Configuration
 # ============================================
 STREAMLIT_SERVER_PORT=8501
@@ -856,9 +1349,9 @@ STREAMLIT_SERVER_HEADLESS=true
 
 ---
 
-## 14. Appendix C: Bicep Template Overview
+## 14. Appendix C: Bicep Template Overview (Simplified - No Auth)
 
-### container-app.bicep (Simplified)
+### container-app.bicep
 
 ```bicep
 param location string = resourceGroup().location
@@ -893,6 +1386,24 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           identity: 'system'
         }
       ]
+      secrets: [
+        {
+          name: 'azure-ai-endpoint'
+          value: '<your-azure-openai-endpoint>'
+        }
+        {
+          name: 'azure-ai-key'
+          value: '<your-azure-openai-key>'
+        }
+        {
+          name: 'azure-di-endpoint'
+          value: '<your-doc-intel-endpoint>'
+        }
+        {
+          name: 'azure-di-key'
+          value: '<your-doc-intel-key>'
+        }
+      ]
     }
     template: {
       containers: [
@@ -903,44 +1414,36 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json('2.0')
             memory: '4Gi'
           }
+          env: [
+            { name: 'AZURE_AI_ENDPOINT', secretRef: 'azure-ai-endpoint' }
+            { name: 'AZURE_AI_API_KEY', secretRef: 'azure-ai-key' }
+            { name: 'AZURE_DI_ENDPOINT', secretRef: 'azure-di-endpoint' }
+            { name: 'AZURE_DI_KEY', secretRef: 'azure-di-key' }
+          ]
         }
       ]
       scale: {
-        minReplicas: 0
-        maxReplicas: 3
+        minReplicas: 1
+        maxReplicas: 1  // Single user, no scaling needed
       }
     }
   }
 }
 
-// Enable Easy Auth (Microsoft Entra ID)
-resource authConfig 'Microsoft.App/containerApps/authConfigs@2023-05-01' = {
-  parent: containerApp
-  name: 'current'
-  properties: {
-    platform: {
-      enabled: true
-    }
-    globalValidation: {
-      unauthenticatedClientAction: 'RedirectToLoginPage'
-    }
-    identityProviders: {
-      azureActiveDirectory: {
-        enabled: true
-        registration: {
-          clientId: '<app-registration-client-id>'
-          openIdIssuer: 'https://login.microsoftonline.com/<tenant-id>/v2.0'
-        }
-        validation: {
-          allowedAudiences: [
-            'api://<app-registration-client-id>'
-          ]
-        }
-      }
-    }
-  }
-}
+// No authentication for POC - open access
+// Future: Add Easy Auth with Microsoft Entra ID if needed
 
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output managedIdentityPrincipalId string = containerApp.identity.principalId
+```
+
+---
+
+## 15. Appendix D: Dependencies (requirements.txt additions)
+
+```txt
+# Add to existing requirements.txt for Streamlit + Report
+streamlit>=1.28.0
+python-docx>=0.8.11
+watchdog>=3.0.0  # For Streamlit file watching
 ```

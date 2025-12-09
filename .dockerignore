@@ -1,0 +1,40 @@
+# Ignore files not needed in container
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+output-*/
+output/
+*.docx
+*.json
+!requirements.txt
+
+# Source docs (will be uploaded by users)
+source-docs/
+
+# Temp files
+*.tmp
+*.log
+.slide_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
