@@ -45,7 +45,7 @@ Used to interpret slide images and extract structured calibration data.
 | Model | Input (per 1K tokens) | Output (per 1K tokens) |
 |-------|----------------------|------------------------|
 | GPT-4.1 | $0.002 | $0.008 |
-| GPT-5.1 | *Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/)* | *Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/)* |
+| GPT-5.1 | $0.00125 | $0.01 |
 
 #### Token Estimation for Slide Extraction
 
@@ -77,7 +77,7 @@ Phase 2 evaluates extracted elements against PI requirements using GPT text mode
 | Model | Input (per 1K tokens) | Output (per 1K tokens) |
 |-------|----------------------|------------------------|
 | GPT-4.1 | $0.002 | $0.008 |
-| GPT-5.1 | *Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/)* | *Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/)* |
+| GPT-5.1 | $0.00125 | $0.01 |
 
 #### Token Estimation for Element Evaluation
 
@@ -104,8 +104,8 @@ With overhead for context and retries:
 | Factor | GPT-4.1 | GPT-5.1 |
 |--------|---------|---------|
 | Availability | Generally Available | Check region availability |
-| Input Cost | $0.002/1K tokens | Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) |
-| Output Cost | $0.008/1K tokens | Check [Azure Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) |
+| Input Cost | $0.002/1K tokens | $0.00125/1K tokens |
+| Output Cost | $0.008/1K tokens | $0.01/1K tokens |
 | Vision Support | ✅ Yes | ✅ Yes |
 | Recommended For | Production workloads | Latest capabilities |
 
