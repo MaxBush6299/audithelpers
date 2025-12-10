@@ -1,17 +1,90 @@
-from typing import Iterable, List, Dict, Union
+from typing import Iterable, List, Dict, Union, Optional
 from io import BytesIO
 from openpyxl import load_workbook
 import re
 import argparse
 import json
 import sys
+import hashlib
+import os
 from pathlib import Path
+
+
+def _compute_file_hash(file_path: str) -> str:
+    """Compute SHA256 hash of a file for cache key generation."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def _get_xlsx_cache_path(file_hash: str, cache_dir: str) -> str:
+    """Generate cache file path for Excel extraction."""
+    return os.path.join(cache_dir, f"xlsx_{file_hash}.json")
+
+
+def _load_xlsx_from_cache(
+    xlsx_path: str,
+    cache_dir: str,
+    verbose: bool = False
+) -> Optional[List[Dict]]:
+    """Load cached Excel extraction results if available."""
+    if not os.path.exists(xlsx_path):
+        return None
+    
+    file_hash = _compute_file_hash(xlsx_path)
+    cache_path = _get_xlsx_cache_path(file_hash, cache_dir)
+    
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            
+            if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
+                if verbose:
+                    print(f"[Excel] Cache hit! Loading {len(cached.get('elements', []))} elements from cache")
+                return cached.get("elements", [])
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    return None
+
+
+def _save_xlsx_to_cache(
+    elements: List[Dict],
+    xlsx_path: str,
+    cache_dir: str,
+    verbose: bool = False
+) -> None:
+    """Save Excel extraction results to cache."""
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    file_hash = _compute_file_hash(xlsx_path)
+    cache_path = _get_xlsx_cache_path(file_hash, cache_dir)
+    
+    cached = {
+        "_cache_meta": {
+            "file_hash": file_hash,
+            "source_file": os.path.basename(xlsx_path),
+            "element_count": len(elements)
+        },
+        "elements": elements
+    }
+    
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cached, f, indent=2, ensure_ascii=False)
+    
+    if verbose:
+        print(f"[Excel] Cached {len(elements)} elements to: {cache_path}")
 
 
 def extract_pi_rows_xlsx(
     source: Union[str, bytes, BytesIO],
     sheets: Iterable[str] = None, # type: ignore
-    verbose: bool = False
+    verbose: bool = False,
+    use_cache: bool = True,
+    cache_dir: str = ".extraction_cache"
 ) -> List[Dict]:
     """
     Extract PI calibration elements from an Excel file.
@@ -23,10 +96,18 @@ def extract_pi_rows_xlsx(
         source: Path to Excel file, bytes, or BytesIO
         sheets: Optional list of sheet names to process (default: all sheets)
         verbose: Print progress information
+        use_cache: Whether to use cached results if available
+        cache_dir: Directory for storing cache files
         
     Returns:
         List of dictionaries with PI-Element, Ask/Look For, Calibrator notes
     """
+    
+    # Check cache if source is a file path
+    if use_cache and isinstance(source, str) and os.path.isfile(source):
+        cached_result = _load_xlsx_from_cache(source, cache_dir, verbose)
+        if cached_result is not None:
+            return cached_result
     
     pat = re.compile(
         r'^\s*(?P<num>\d+(?:\.\d+)*)\s*([>\-–—])\s*(?P<text>.+?)\s*$'
@@ -111,6 +192,11 @@ def extract_pi_rows_xlsx(
         print(f"Processed {rows_processed} rows, extracted {len(out)} elements, skipped {rows_skipped} rows")
 
     wb.close()
+    
+    # Save to cache if source is a file path
+    if use_cache and isinstance(source, str) and os.path.isfile(source):
+        _save_xlsx_to_cache(out, source, cache_dir, verbose)
+    
     return out
 
 

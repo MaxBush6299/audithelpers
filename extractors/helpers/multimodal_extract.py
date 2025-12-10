@@ -10,6 +10,8 @@ Output: Clean, simplified JSON per slide with the most accurate text content.
 """
 import os
 import json
+import hashlib
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
@@ -25,6 +27,91 @@ from .di_helpers import analyze_image_bytes, normalize_di_result
 
 from pptx import Presentation
 import sys
+
+
+# Default cache directory for extraction results
+DEFAULT_CACHE_DIR = os.path.join(os.path.dirname(__file__), ".extraction_cache")
+
+
+def _compute_file_hash(file_path: str) -> str:
+    """Compute SHA256 hash of a file for cache key generation."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        # Read in chunks for large files
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def _get_cache_path(file_hash: str, model: str, use_di: bool, cache_dir: str) -> str:
+    """Generate cache file path based on file hash and extraction settings."""
+    # Include model and DI setting in cache key so different configs get different caches
+    cache_key = f"{file_hash}_{model}_di{use_di}"
+    return os.path.join(cache_dir, f"{cache_key}.json")
+
+
+def _load_from_cache(
+    pptx_path: str,
+    model: str,
+    use_di: bool,
+    cache_dir: str,
+    verbose: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Check if we have cached extraction results for this file.
+    
+    Returns cached results if found and valid, None otherwise.
+    """
+    if not os.path.exists(pptx_path):
+        return None
+    
+    file_hash = _compute_file_hash(pptx_path)
+    cache_path = _get_cache_path(file_hash, model, use_di, cache_dir)
+    
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            
+            # Verify cache metadata matches
+            if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
+                if verbose:
+                    print(f"[Pipeline] Cache hit! Loading from: {cache_path}")
+                return cached
+        except (json.JSONDecodeError, IOError) as e:
+            if verbose:
+                print(f"[Pipeline] Cache file corrupt, will re-extract: {e}")
+    
+    return None
+
+
+def _save_to_cache(
+    results: Dict[str, Any],
+    pptx_path: str,
+    model: str,
+    use_di: bool,
+    cache_dir: str,
+    verbose: bool = False
+) -> None:
+    """Save extraction results to cache."""
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    file_hash = _compute_file_hash(pptx_path)
+    cache_path = _get_cache_path(file_hash, model, use_di, cache_dir)
+    
+    # Add cache metadata
+    results["_cache_meta"] = {
+        "file_hash": file_hash,
+        "source_file": os.path.basename(pptx_path),
+        "model": model,
+        "use_di": use_di
+    }
+    
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+    
+    if verbose:
+        print(f"[Pipeline] Results cached to: {cache_path}")
 
 
 @dataclass
@@ -276,7 +363,9 @@ def quick_extract(
     output_path: Optional[str] = None,
     verbose: bool = True,
     use_di: bool = True,
-    model: str = "gpt-4.1"
+    model: str = "gpt-4.1",
+    use_cache: bool = True,
+    cache_dir: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Convenience function that loads config from environment variables.
@@ -292,6 +381,8 @@ def quick_extract(
         verbose: Print progress
         use_di: Whether to use Document Intelligence for embedded image OCR
         model: Which model to use - "gpt-4.1" or "gpt-5.1"
+        use_cache: Whether to use cached results if available (default True)
+        cache_dir: Directory to store cache files (default: .extraction_cache)
     
     Required env vars for GPT-4.1:
     - AZURE_AI_ENDPOINT, AZURE_AI_API_KEY, GPT_4_1_DEPLOYMENT
@@ -304,6 +395,22 @@ def quick_extract(
     """
     from dotenv import load_dotenv
     load_dotenv()
+    
+    # Determine cache directory
+    if cache_dir is None:
+        cache_dir = os.path.join(os.path.dirname(pptx_path), ".extraction_cache")
+    
+    # Check cache first
+    if use_cache:
+        cached = _load_from_cache(pptx_path, model, use_di, cache_dir, verbose)
+        if cached is not None:
+            # Still save to output_path if requested
+            if output_path:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump(cached, f, indent=2, ensure_ascii=False)
+                if verbose:
+                    print(f"[Pipeline] Cached output copied to: {output_path}")
+            return cached
     
     # LLM config based on model selection
     fallback_llm = None
@@ -350,7 +457,13 @@ def quick_extract(
         fallback_llm=fallback_llm
     )
     
-    return multimodal_extract(pptx_path, config, output_path, verbose)
+    results = multimodal_extract(pptx_path, config, output_path, verbose)
+    
+    # Save to cache for future runs
+    if use_cache:
+        _save_to_cache(results, pptx_path, model, use_di, cache_dir, verbose)
+    
+    return results
 
 
 def quick_extract_gpt5(
@@ -375,13 +488,16 @@ def quick_extract_multi(
     output_path: Optional[str] = None,
     verbose: bool = True,
     use_di: bool = True,
-    model: str = "gpt-4.1"
+    model: str = "gpt-4.1",
+    use_cache: bool = True,
+    cache_dir: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Extract text from MULTIPLE PPTX files using multimodal LLM analysis.
     
     Processes each PPTX in order, combining results with continuous slide indexing.
     Each slide includes source_file and source_index for traceability.
+    Uses per-file caching so unchanged files won't be re-extracted.
     
     Args:
         pptx_paths: List of paths to PPTX files (processed in order)
@@ -389,6 +505,8 @@ def quick_extract_multi(
         verbose: Print progress
         use_di: Whether to use Document Intelligence for embedded image OCR
         model: Which model to use - "gpt-4.1" or "gpt-5.1"
+        use_cache: Whether to use cached results if available (default True)
+        cache_dir: Directory to store cache files (default: .extraction_cache in first file's dir)
     
     Returns:
         Combined JSON with all slides from all files:
@@ -406,7 +524,7 @@ def quick_extract_multi(
     
     if len(pptx_paths) == 1:
         # Single file - just use quick_extract
-        return quick_extract(pptx_paths[0], output_path, verbose, use_di, model)
+        return quick_extract(pptx_paths[0], output_path, verbose, use_di, model, use_cache, cache_dir)
     
     if verbose:
         print(f"[Multi-PPTX] Processing {len(pptx_paths)} files...")
@@ -419,8 +537,8 @@ def quick_extract_multi(
         if verbose:
             print(f"\n[Multi-PPTX] File {file_num}/{len(pptx_paths)}: {os.path.basename(pptx_path)}")
         
-        # Extract from this file (without saving)
-        result = quick_extract(pptx_path, None, verbose, use_di, model)
+        # Extract from this file (without saving) - uses per-file caching
+        result = quick_extract(pptx_path, None, verbose, use_di, model, use_cache, cache_dir)
         
         source_files.append(os.path.basename(pptx_path))
         

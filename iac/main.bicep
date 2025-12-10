@@ -44,8 +44,19 @@ param containerCpu string = '2.0'
 @description('Memory for Container App')
 param containerMemory string = '4Gi'
 
-@description('GPT deployment name in Azure OpenAI')
+@description('GPT-4.1 deployment name in Azure OpenAI')
 param gptDeploymentName string = 'gpt-41'
+
+@description('Azure OpenAI GPT-5.1 endpoint (optional, for separate GPT-5 deployment)')
+@secure()
+param azureAiGpt5Endpoint string = ''
+
+@description('Azure OpenAI GPT-5.1 API key (optional)')
+@secure()
+param azureAiGpt5ApiKey string = ''
+
+@description('GPT-5.1 deployment name (optional)')
+param gpt5DeploymentName string = ''
 
 // Determine if using existing resources
 var useExistingAi = !empty(existingAiServicesName)
@@ -146,6 +157,9 @@ module containerApp 'modules/container-app.bicep' = if (deployContainerApp && co
     azureAiEndpoint: aiEndpoint
     azureAiApiKey: aiKey
     gptDeploymentName: gptDeploymentName
+    azureAiGpt5Endpoint: azureAiGpt5Endpoint
+    azureAiGpt5ApiKey: azureAiGpt5ApiKey
+    gpt5DeploymentName: gpt5DeploymentName
     documentIntelligenceEndpoint: diEndpoint
     documentIntelligenceKey: diKey
     tags: tags
