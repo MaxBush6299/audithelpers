@@ -57,6 +57,9 @@ param documentIntelligenceEndpoint string
 @secure()
 param documentIntelligenceKey string
 
+@description('Storage account name for caching (uses Managed Identity)')
+param storageAccountName string = ''
+
 @description('Tags to apply to resources')
 param tags object = {}
 
@@ -184,6 +187,11 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               name: 'GPT_5_1_DEPLOYMENT'
               value: gpt5DeploymentName
             }
+          ] : [], !empty(storageAccountName) ? [
+            {
+              name: 'AZURE_STORAGE_ACCOUNT_NAME'
+              value: storageAccountName
+            }
           ] : [])
           // Add startup probe with much longer timeout for large image with LibreOffice (~700MB)
           // LibreOffice installation can take significant time to initialize on first run
@@ -254,3 +262,6 @@ output name string = containerApp.name
 
 @description('The Container Apps Environment ID')
 output environmentId string = containerAppsEnvironment.id
+
+@description('The Container App Managed Identity Principal ID')
+output principalId string = containerApp.identity.principalId

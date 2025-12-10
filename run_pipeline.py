@@ -54,6 +54,7 @@ class PipelineConfig:
     skip_extraction: bool = False
     skip_evaluation: bool = False
     skip_cache: bool = False  # If True, forces fresh extraction even if cached
+    allow_local_cache: bool = False  # If True, allows local filesystem cache. For development environments only; NEVER enable in production or container deployments due to security risks.
     generate_report: bool = False
     report_options: Dict[str, bool] = field(default_factory=dict)
     verbose: bool = True
@@ -112,7 +113,8 @@ def run_stage1_excel_extraction(config: PipelineConfig, output_dir: Path) -> Dic
     elements = extract_pi_rows_xlsx(
         config.elements_xlsx,
         verbose=config.verbose,
-        use_cache=not config.skip_cache
+        use_cache=not config.skip_cache,
+        allow_local_cache=config.allow_local_cache
     )
     
     output_path = output_dir / "elements.json"
@@ -169,7 +171,8 @@ def run_stage2_pptx_extraction(config: PipelineConfig, output_dir: Path) -> Dict
             verbose=config.verbose,
             use_di=config.use_di,
             model=config.model,
-            use_cache=use_cache
+            use_cache=use_cache,
+            allow_local_cache=config.allow_local_cache
         )
     else:
         evidence = quick_extract_multi(
@@ -178,7 +181,8 @@ def run_stage2_pptx_extraction(config: PipelineConfig, output_dir: Path) -> Dict
             verbose=config.verbose,
             use_di=config.use_di,
             model=config.model,
-            use_cache=use_cache
+            use_cache=use_cache,
+            allow_local_cache=config.allow_local_cache
         )
     
     total_slides = evidence.get("total_slides", len(evidence.get("slides", [])))
@@ -574,6 +578,12 @@ Required environment variables:
     )
     
     parser.add_argument(
+        "--allow-local-cache",
+        action="store_true",
+        help="Allow local filesystem cache (for development only, NOT recommended for production)"
+    )
+    
+    parser.add_argument(
         "-q", "--quiet",
         action="store_true",
         help="Suppress verbose output"
@@ -607,6 +617,7 @@ Required environment variables:
         skip_extraction=args.skip_extraction,
         skip_evaluation=args.skip_evaluation,
         skip_cache=args.skip_cache,
+        allow_local_cache=args.allow_local_cache,
         generate_report=args.report,
         report_options=report_options,
         verbose=not args.quiet

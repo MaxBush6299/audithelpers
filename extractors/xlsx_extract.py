@@ -5,48 +5,40 @@ import re
 import argparse
 import json
 import sys
-import hashlib
 import os
 from pathlib import Path
 
-
-def _compute_file_hash(file_path: str) -> str:
-    """Compute SHA256 hash of a file for cache key generation."""
-    sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-
-def _get_xlsx_cache_path(file_hash: str, cache_dir: str) -> str:
-    """Generate cache file path for Excel extraction."""
-    return os.path.join(cache_dir, f"xlsx_{file_hash}.json")
+# Import cache storage abstraction
+from extractors.helpers.cache_storage import (
+    get_cache_storage,
+    compute_file_hash,
+    get_cache_key
+)
 
 
 def _load_xlsx_from_cache(
     xlsx_path: str,
-    cache_dir: str,
+    allow_local_cache: bool = False,
     verbose: bool = False
 ) -> Optional[List[Dict]]:
     """Load cached Excel extraction results if available."""
     if not os.path.exists(xlsx_path):
         return None
     
-    file_hash = _compute_file_hash(xlsx_path)
-    cache_path = _get_xlsx_cache_path(file_hash, cache_dir)
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return None
     
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cached = json.load(f)
-            
-            if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
-                if verbose:
-                    print(f"[Excel] Cache hit! Loading {len(cached.get('elements', []))} elements from cache")
-                return cached.get("elements", [])
-        except (json.JSONDecodeError, IOError):
-            pass
+    file_hash = compute_file_hash(xlsx_path)
+    cache_key = get_cache_key(file_hash, prefix="xlsx")
+    
+    cached = storage.get(cache_key)
+    if cached is not None:
+        if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
+            elements = cached.get("elements", [])
+            if verbose:
+                print(f"[Excel] Cache hit! Loading {len(elements)} elements from cache")
+            return elements
     
     return None
 
@@ -54,14 +46,16 @@ def _load_xlsx_from_cache(
 def _save_xlsx_to_cache(
     elements: List[Dict],
     xlsx_path: str,
-    cache_dir: str,
+    allow_local_cache: bool = False,
     verbose: bool = False
 ) -> None:
     """Save Excel extraction results to cache."""
-    os.makedirs(cache_dir, exist_ok=True)
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return
     
-    file_hash = _compute_file_hash(xlsx_path)
-    cache_path = _get_xlsx_cache_path(file_hash, cache_dir)
+    file_hash = compute_file_hash(xlsx_path)
+    cache_key = get_cache_key(file_hash, prefix="xlsx")
     
     cached = {
         "_cache_meta": {
@@ -72,11 +66,10 @@ def _save_xlsx_to_cache(
         "elements": elements
     }
     
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(cached, f, indent=2, ensure_ascii=False)
+    storage.set(cache_key, cached)
     
     if verbose:
-        print(f"[Excel] Cached {len(elements)} elements to: {cache_path}")
+        print(f"[Excel] Cached {len(elements)} elements")
 
 
 def extract_pi_rows_xlsx(
@@ -84,7 +77,7 @@ def extract_pi_rows_xlsx(
     sheets: Iterable[str] = None, # type: ignore
     verbose: bool = False,
     use_cache: bool = True,
-    cache_dir: str = ".extraction_cache"
+    allow_local_cache: bool = False
 ) -> List[Dict]:
     """
     Extract PI calibration elements from an Excel file.
@@ -97,15 +90,18 @@ def extract_pi_rows_xlsx(
         sheets: Optional list of sheet names to process (default: all sheets)
         verbose: Print progress information
         use_cache: Whether to use cached results if available
-        cache_dir: Directory for storing cache files
+        allow_local_cache: Allow local filesystem cache (for development only)
         
     Returns:
         List of dictionaries with PI-Element, Ask/Look For, Calibrator notes
+    
+    Optional env vars (for Azure Blob cache):
+    - AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME
     """
     
     # Check cache if source is a file path
     if use_cache and isinstance(source, str) and os.path.isfile(source):
-        cached_result = _load_xlsx_from_cache(source, cache_dir, verbose)
+        cached_result = _load_xlsx_from_cache(source, allow_local_cache, verbose)
         if cached_result is not None:
             return cached_result
     
@@ -195,7 +191,7 @@ def extract_pi_rows_xlsx(
     
     # Save to cache if source is a file path
     if use_cache and isinstance(source, str) and os.path.isfile(source):
-        _save_xlsx_to_cache(out, source, cache_dir, verbose)
+        _save_xlsx_to_cache(out, source, allow_local_cache, verbose)
     
     return out
 
