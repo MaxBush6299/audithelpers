@@ -205,9 +205,10 @@ resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' e
   name: existingStorageAccountName
 }
 
-// Use a deterministic GUID based on resource names (known at compile time)
+// Use a deterministic GUID based on resource names only (known at compile time)
+// The role assignment name must be deterministic and not depend on runtime values
 resource existingStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useExistingStorage && deployContainerApp && containerImage != '') {
-  name: guid(resourceGroup().id, existingStorageAccountName, containerApp!.outputs.principalId, 'StorageBlobDataContributor')
+  name: guid(resourceGroup().id, existingStorageAccountName, containerAppName, 'StorageBlobDataContributor')
   scope: existingStorageAccount
   properties: {
     principalId: containerApp!.outputs.principalId
