@@ -44,17 +44,40 @@ param containerCpu string = '2.0'
 @description('Memory for Container App')
 param containerMemory string = '4Gi'
 
-@description('GPT deployment name in Azure OpenAI')
+@description('GPT-4.1 deployment name in Azure OpenAI')
 param gptDeploymentName string = 'gpt-41'
+
+@description('Azure OpenAI GPT-5.1 endpoint (optional, for separate GPT-5 deployment)')
+@secure()
+param azureAiGpt5Endpoint string = ''
+
+@description('Azure OpenAI GPT-5.1 API key (optional)')
+@secure()
+param azureAiGpt5ApiKey string = ''
+
+@description('GPT-5.1 deployment name (optional)')
+param gpt5DeploymentName string = ''
+
+@description('Deploy Storage Account for caching')
+param deployStorageAccount bool = true
+
+@description('Existing Storage Account name for caching. Leave empty to create new.')
+param existingStorageAccountName string = ''
+
+@description('Storage Account SKU (only used when creating new)')
+@allowed(['Standard_LRS', 'Standard_GRS', 'Standard_ZRS'])
+param storageAccountSku string = 'Standard_LRS'
 
 // Determine if using existing resources
 var useExistingAi = !empty(existingAiServicesName)
 var useExistingDi = !empty(existingDocIntelligenceName)
+var useExistingStorage = !empty(existingStorageAccountName)
 
 // Generate unique names for new resources
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var newAiServicesName = '${baseName}-ai-${environment}-${uniqueSuffix}'
 var newDocIntelligenceName = '${baseName}-di-${environment}-${uniqueSuffix}'
+var newStorageAccountName = toLower('${baseName}cache${environment}${take(uniqueSuffix, 8)}')
 var containerRegistryName = toLower('${baseName}acr${environment}${uniqueSuffix}')
 var containerAppName = '${baseName}-app-${environment}'
 var containerEnvName = '${baseName}-env-${environment}'
@@ -118,6 +141,11 @@ var diName = useExistingDi
   ? existingDocIntelligence!.name 
   : newDocIntelligence!.outputs.name
 
+// Resolve Storage Account name
+var storageAccountName = useExistingStorage 
+  ? existingStorageAccountName 
+  : (deployStorageAccount ? newStorageAccountName : '')
+
 // Azure Container Registry
 module containerRegistry 'modules/container-registry.bicep' = {
   name: 'container-registry-deployment'
@@ -146,9 +174,46 @@ module containerApp 'modules/container-app.bicep' = if (deployContainerApp && co
     azureAiEndpoint: aiEndpoint
     azureAiApiKey: aiKey
     gptDeploymentName: gptDeploymentName
+    azureAiGpt5Endpoint: azureAiGpt5Endpoint
+    azureAiGpt5ApiKey: azureAiGpt5ApiKey
+    gpt5DeploymentName: gpt5DeploymentName
     documentIntelligenceEndpoint: diEndpoint
     documentIntelligenceKey: diKey
+    storageAccountName: storageAccountName
     tags: tags
+  }
+}
+
+// Storage Account for caching (deployed after Container App to get its principal ID)
+// When using existing storage, just do the role assignment
+module storageAccount 'modules/storage-account.bicep' = if (deployStorageAccount && !useExistingStorage) {
+  name: 'storage-account-deployment'
+  params: {
+    storageAccountName: newStorageAccountName
+    location: location
+    sku: storageAccountSku
+    // For managed Container Apps VNet, we allow public access but secure via RBAC
+    // Set allowPublicAccess to false when using custom VNet with service endpoints
+    allowPublicAccess: true
+    blobContributorPrincipalId: deployContainerApp && containerImage != '' ? containerApp!.outputs.principalId : ''
+    tags: tags
+  }
+}
+
+// Role assignment for existing storage account
+resource existingStorageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = if (useExistingStorage) {
+  name: existingStorageAccountName
+}
+
+// Use a deterministic GUID based on resource names only (known at compile time)
+// The role assignment name must be deterministic and not depend on runtime values
+resource existingStorageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useExistingStorage && deployContainerApp && containerImage != '') {
+  name: guid(resourceGroup().id, existingStorageAccountName, containerAppName, 'StorageBlobDataContributor')
+  scope: existingStorageAccount
+  properties: {
+    principalId: containerApp!.outputs.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   }
 }
 
@@ -166,3 +231,7 @@ output acrName string = containerRegistry.outputs.name
 // Container App outputs (conditional) - use non-null assertion since condition guarantees existence
 output containerAppUrl string = deployContainerApp && containerImage != '' ? containerApp!.outputs.url : ''
 output containerAppFqdn string = deployContainerApp && containerImage != '' ? containerApp!.outputs.fqdn : ''
+
+// Storage Account outputs
+output storageAccountName string = storageAccountName
+output storageAccountBlobEndpoint string = deployStorageAccount && !useExistingStorage ? storageAccount!.outputs.blobEndpoint : (useExistingStorage ? 'https://${existingStorageAccountName}.blob.${az.environment().suffixes.storage}/' : '')

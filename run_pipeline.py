@@ -53,6 +53,8 @@ class PipelineConfig:
     use_di: bool = True
     skip_extraction: bool = False
     skip_evaluation: bool = False
+    skip_cache: bool = False  # If True, forces fresh extraction even if cached
+    allow_local_cache: bool = False  # If True, allows local filesystem cache. For development environments only; NEVER enable in production or container deployments due to security risks.
     generate_report: bool = False
     report_options: Dict[str, bool] = field(default_factory=dict)
     verbose: bool = True
@@ -108,7 +110,12 @@ def run_stage1_excel_extraction(config: PipelineConfig, output_dir: Path) -> Dic
     if config.verbose:
         print_progress(f"Loading: {config.elements_xlsx}")
     
-    elements = extract_pi_rows_xlsx(config.elements_xlsx, verbose=config.verbose)
+    elements = extract_pi_rows_xlsx(
+        config.elements_xlsx,
+        verbose=config.verbose,
+        use_cache=not config.skip_cache,
+        allow_local_cache=config.allow_local_cache
+    )
     
     output_path = output_dir / "elements.json"
     save_json(str(output_path), elements)
@@ -151,15 +158,21 @@ def run_stage2_pptx_extraction(config: PipelineConfig, output_dir: Path) -> Dict
     
     if config.verbose:
         print_progress(f"Processing {len(config.evidence_pptx)} PPTX file(s)...")
+        if not config.skip_cache:
+            print_progress("(Using cache if available - use --skip-cache to force re-extraction)")
     
-    # Use multi-file extraction
+    # Use multi-file extraction with caching
+    use_cache = not config.skip_cache
+    
     if len(config.evidence_pptx) == 1:
         evidence = quick_extract(
             config.evidence_pptx[0],
             output_path=str(output_path),
             verbose=config.verbose,
             use_di=config.use_di,
-            model=config.model
+            model=config.model,
+            use_cache=use_cache,
+            allow_local_cache=config.allow_local_cache
         )
     else:
         evidence = quick_extract_multi(
@@ -167,7 +180,9 @@ def run_stage2_pptx_extraction(config: PipelineConfig, output_dir: Path) -> Dict
             output_path=str(output_path),
             verbose=config.verbose,
             use_di=config.use_di,
-            model=config.model
+            model=config.model,
+            use_cache=use_cache,
+            allow_local_cache=config.allow_local_cache
         )
     
     total_slides = evidence.get("total_slides", len(evidence.get("slides", [])))
@@ -557,6 +572,18 @@ Required environment variables:
     )
     
     parser.add_argument(
+        "--skip-cache",
+        action="store_true",
+        help="Force fresh extraction, ignoring any cached results"
+    )
+    
+    parser.add_argument(
+        "--allow-local-cache",
+        action="store_true",
+        help="Allow local filesystem cache (for development only, NOT recommended for production)"
+    )
+    
+    parser.add_argument(
         "-q", "--quiet",
         action="store_true",
         help="Suppress verbose output"
@@ -589,6 +616,8 @@ Required environment variables:
         use_di=not args.no_di,
         skip_extraction=args.skip_extraction,
         skip_evaluation=args.skip_evaluation,
+        skip_cache=args.skip_cache,
+        allow_local_cache=args.allow_local_cache,
         generate_report=args.report,
         report_options=report_options,
         verbose=not args.quiet

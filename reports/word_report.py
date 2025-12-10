@@ -9,6 +9,7 @@ Generates professional Word documents (.docx) with:
 """
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union
@@ -41,6 +42,30 @@ class ReportGenerator:
         'Needs More Evidence': RGBColor(255, 165, 0),  # Orange
         'Error': RGBColor(128, 128, 128)   # Gray
     }
+    
+    # Regex to match XML-incompatible characters (NULL bytes and control chars except tab, newline, carriage return)
+    _INVALID_XML_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+    
+    @staticmethod
+    def _sanitize_text(text: Optional[str]) -> str:
+        """
+        Remove NULL bytes and control characters that are invalid in XML.
+        
+        XML 1.0 only allows: #x9 (tab), #xA (newline), #xD (carriage return),
+        and characters >= #x20. This removes all other control characters.
+        
+        Args:
+            text: Input text that may contain invalid characters
+            
+        Returns:
+            Cleaned text safe for XML/Word documents
+        """
+        if text is None:
+            return ''
+        if not isinstance(text, str):
+            text = str(text)
+        # Remove NULL bytes and control characters
+        return ReportGenerator._INVALID_XML_CHARS.sub('', text)
     
     def __init__(self, options: Optional[Dict] = None):
         """
@@ -184,7 +209,7 @@ class ReportGenerator:
         
         cells = [
             ('Generated:', formatted_date),
-            ('Model:', model),
+            ('Model:', self._sanitize_text(model)),
             ('Evidence Files:', ', '.join(evidence_files) if evidence_files else 'N/A'),
         ]
         
@@ -192,7 +217,7 @@ class ReportGenerator:
             row = table.rows[i]
             row.cells[0].text = label
             row.cells[0].paragraphs[0].runs[0].bold = True
-            row.cells[1].text = value
+            row.cells[1].text = self._sanitize_text(value)
         
         self.doc.add_paragraph()
         self._add_horizontal_line()
@@ -359,12 +384,12 @@ class ReportGenerator:
             if ask_for:
                 self.doc.add_heading('Element Description:', level=3)
                 p = self.doc.add_paragraph()
-                p.add_run(ask_for).italic = True
+                p.add_run(self._sanitize_text(ask_for)).italic = True
         
         # Evaluation reasoning
         if self.options['include_reasoning'] and reasoning:
             self.doc.add_heading('Evaluation Reasoning:', level=3)
-            self.doc.add_paragraph(reasoning)
+            self.doc.add_paragraph(self._sanitize_text(reasoning))
         
         # Evidence excerpts
         if self.options['include_excerpts'] and elem_id in evidence_lookup:
@@ -378,7 +403,8 @@ class ReportGenerator:
                     slide_idx = evidence.get('slide_index', '?')
                     full_text = evidence.get('full_text', evidence.get('text_preview', ''))
                     
-                    # Truncate if too long
+                    # Sanitize and truncate if too long
+                    full_text = self._sanitize_text(full_text)
                     max_len = self.options['max_excerpt_length']
                     if len(full_text) > max_len:
                         full_text = full_text[:max_len] + '...'

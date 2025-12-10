@@ -1,17 +1,83 @@
-from typing import Iterable, List, Dict, Union
+from typing import Iterable, List, Dict, Union, Optional
 from io import BytesIO
 from openpyxl import load_workbook
 import re
 import argparse
 import json
 import sys
+import os
 from pathlib import Path
+
+# Import cache storage abstraction
+from extractors.helpers.cache_storage import (
+    get_cache_storage,
+    compute_file_hash,
+    get_cache_key
+)
+
+
+def _load_xlsx_from_cache(
+    xlsx_path: str,
+    allow_local_cache: bool = False,
+    verbose: bool = False
+) -> Optional[List[Dict]]:
+    """Load cached Excel extraction results if available."""
+    if not os.path.exists(xlsx_path):
+        return None
+    
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return None
+    
+    file_hash = compute_file_hash(xlsx_path)
+    cache_key = get_cache_key(file_hash, prefix="xlsx")
+    
+    cached = storage.get(cache_key)
+    if cached is not None:
+        if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
+            elements = cached.get("elements", [])
+            if verbose:
+                print(f"[Excel] Cache hit! Loading {len(elements)} elements from cache")
+            return elements
+    
+    return None
+
+
+def _save_xlsx_to_cache(
+    elements: List[Dict],
+    xlsx_path: str,
+    allow_local_cache: bool = False,
+    verbose: bool = False
+) -> None:
+    """Save Excel extraction results to cache."""
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return
+    
+    file_hash = compute_file_hash(xlsx_path)
+    cache_key = get_cache_key(file_hash, prefix="xlsx")
+    
+    cached = {
+        "_cache_meta": {
+            "file_hash": file_hash,
+            "source_file": os.path.basename(xlsx_path),
+            "element_count": len(elements)
+        },
+        "elements": elements
+    }
+    
+    storage.set(cache_key, cached)
+    
+    if verbose:
+        print(f"[Excel] Cached {len(elements)} elements")
 
 
 def extract_pi_rows_xlsx(
     source: Union[str, bytes, BytesIO],
     sheets: Iterable[str] = None, # type: ignore
-    verbose: bool = False
+    verbose: bool = False,
+    use_cache: bool = True,
+    allow_local_cache: bool = False
 ) -> List[Dict]:
     """
     Extract PI calibration elements from an Excel file.
@@ -23,10 +89,21 @@ def extract_pi_rows_xlsx(
         source: Path to Excel file, bytes, or BytesIO
         sheets: Optional list of sheet names to process (default: all sheets)
         verbose: Print progress information
+        use_cache: Whether to use cached results if available
+        allow_local_cache: Allow local filesystem cache (for development only)
         
     Returns:
         List of dictionaries with PI-Element, Ask/Look For, Calibrator notes
+    
+    Optional env vars (for Azure Blob cache):
+    - AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME
     """
+    
+    # Check cache if source is a file path
+    if use_cache and isinstance(source, str) and os.path.isfile(source):
+        cached_result = _load_xlsx_from_cache(source, allow_local_cache, verbose)
+        if cached_result is not None:
+            return cached_result
     
     pat = re.compile(
         r'^\s*(?P<num>\d+(?:\.\d+)*)\s*([>\-–—])\s*(?P<text>.+?)\s*$'
@@ -111,6 +188,11 @@ def extract_pi_rows_xlsx(
         print(f"Processed {rows_processed} rows, extracted {len(out)} elements, skipped {rows_skipped} rows")
 
     wb.close()
+    
+    # Save to cache if source is a file path
+    if use_cache and isinstance(source, str) and os.path.isfile(source):
+        _save_xlsx_to_cache(out, source, allow_local_cache, verbose)
+    
     return out
 
 

@@ -15,6 +15,7 @@
 | **Document Intelligence** | OCR for embedded images (Form Recognizer) |
 | **Container Registry** | Docker image registry for the Streamlit app |
 | **Container App** | Serverless container hosting for the web UI |
+| **Storage Account** | (Optional) Azure Blob Storage for extraction result caching |
 
 ## Deployment Workflow
 
@@ -207,7 +208,8 @@ iac/
 │   ├── ai-services.bicep           # Azure OpenAI module
 │   ├── document-intelligence.bicep # Document Intelligence module
 │   ├── container-registry.bicep    # Container Registry module
-│   └── container-app.bicep         # Container App module
+│   ├── container-app.bicep         # Container App module
+│   └── storage-account.bicep       # Storage Account module (for caching)
 ├── parameters/
 │   ├── dev.bicepparam              # Development parameters
 │   └── prod.bicepparam             # Production parameters
@@ -225,6 +227,7 @@ The Container App is automatically configured with these environment variables f
 | `GPT_4_1_DEPLOYMENT` | GPT deployment name |
 | `AZURE_DI_ENDPOINT` | Document Intelligence endpoint |
 | `AZURE_DI_KEY` | Document Intelligence key (stored as secret) |
+| `AZURE_STORAGE_ACCOUNT_NAME` | Storage Account name for caching (if configured) |
 
 ## Local Development
 
@@ -255,8 +258,11 @@ AZURE_AI_API_KEY=$aiKey
 GPT_4_1_DEPLOYMENT=gpt-41
 AZURE_DI_ENDPOINT=$($outputs.documentIntelligenceEndpoint.value)
 AZURE_DI_KEY=$diKey
+AZURE_STORAGE_ACCOUNT_NAME=yourstorageaccountname
 "@ | Out-File -FilePath ../.env -Encoding utf8
 ```
+
+> **Note:** For local development with Azure Blob caching, you must be logged in via `az login` and have the **Storage Blob Data Contributor** role on the storage account.
 
 ## Customization
 
@@ -272,6 +278,58 @@ Edit the parameter files in `parameters/` to customize:
 | `containerCpu` | Container CPU cores | `0.5`, `1.0`, `2.0`, etc. |
 | `containerMemory` | Container memory | `1Gi`, `2Gi`, `4Gi`, etc. |
 | `deployContainerApp` | Deploy Container App | `true`, `false` |
+| `existingStorageAccountName` | Existing Storage Account for caching | Storage account name or empty |
+
+## Caching with Azure Blob Storage
+
+The application supports caching extraction results to Azure Blob Storage, which dramatically speeds up re-runs by reusing previously extracted content. This is especially useful for large PPTX/XLSX files.
+
+### Option 1: Use an Existing Storage Account
+
+If you already have a storage account, pass it during deployment:
+
+```powershell
+az deployment group create `
+  --resource-group $resourceGroup `
+  --template-file main.bicep `
+  --parameters parameters/dev.bicepparam `
+  --parameters deployContainerApp=true `
+  --parameters containerImage="$acrLoginServer/calibration-app:latest" `
+  --parameters existingStorageAccountName="yourstorageaccountname"
+```
+
+The deployment will automatically:
+1. Configure the Container App with `AZURE_STORAGE_ACCOUNT_NAME` environment variable
+2. Assign the **Storage Blob Data Contributor** role to the Container App's managed identity
+
+### Option 2: No Caching
+
+If no storage account is provided, the application will skip caching entirely (using `NullCacheStorage`). This is secure and functional but may result in slower re-runs.
+
+### Manual Role Assignment
+
+If the role assignment fails during deployment (e.g., due to existing assignments), manually assign the role:
+
+```powershell
+# Get the Container App's managed identity principal ID
+$principalId = az containerapp show `
+  --name aicalib-app-dev `
+  --resource-group $resourceGroup `
+  --query identity.principalId -o tsv
+
+# Get the storage account resource ID
+$storageId = az storage account show `
+  --name yourstorageaccountname `
+  --resource-group $resourceGroup `
+  --query id -o tsv
+
+# Assign the Storage Blob Data Contributor role
+az role assignment create `
+  --role "Storage Blob Data Contributor" `
+  --assignee-object-id $principalId `
+  --assignee-principal-type ServicePrincipal `
+  --scope $storageId
+```
 
 ## Using Azure AI Foundry Instead
 

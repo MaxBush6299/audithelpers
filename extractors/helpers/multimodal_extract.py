@@ -10,7 +10,8 @@ Output: Clean, simplified JSON per slide with the most accurate text content.
 """
 import os
 import json
-from typing import Dict, Any, List, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 
 from .config import DIConfig
@@ -22,9 +23,80 @@ from .slide_renderer import (
 )
 from .pptx_helpers import iter_text_shapes, iter_table_cells, iter_images
 from .di_helpers import analyze_image_bytes, normalize_di_result
+from .cache_storage import (
+    CacheStorage,
+    get_cache_storage,
+    reset_cache_storage,
+    compute_file_hash,
+    get_cache_key
+)
 
 from pptx import Presentation
 import sys
+
+
+def _load_from_cache(
+    pptx_path: str,
+    model: str,
+    use_di: bool,
+    allow_local_cache: bool = False,
+    verbose: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Check if we have cached extraction results for this file.
+    
+    Returns cached results if found and valid, None otherwise.
+    """
+    if not os.path.exists(pptx_path):
+        return None
+    
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return None
+    
+    file_hash = compute_file_hash(pptx_path)
+    cache_key = get_cache_key(file_hash, prefix="pptx", model=model, di=str(use_di))
+    
+    cached = storage.get(cache_key)
+    if cached is not None:
+        # Verify cache metadata matches
+        if cached.get("_cache_meta", {}).get("file_hash") == file_hash:
+            if verbose:
+                print(f"[Pipeline] Cache hit! Loading from cache")
+            return cached
+    
+    return None
+
+
+def _save_to_cache(
+    results: Dict[str, Any],
+    pptx_path: str,
+    model: str,
+    use_di: bool,
+    allow_local_cache: bool = False,
+    verbose: bool = False
+) -> None:
+    """Save extraction results to cache."""
+    storage = get_cache_storage(allow_local=allow_local_cache, verbose=False)
+    if not storage.is_available:
+        return
+    
+    file_hash = compute_file_hash(pptx_path)
+    cache_key = get_cache_key(file_hash, prefix="pptx", model=model, di=str(use_di))
+    
+    # Add cache metadata
+    results["_cache_meta"] = {
+        "file_hash": file_hash,
+        "source_file": os.path.basename(pptx_path),
+        "model": model,
+        "use_di": use_di
+    }
+    
+    storage.set(cache_key, results)
+    
+    if verbose:
+        storage_name = type(storage).__name__
+        print(f"[Pipeline] Results cached ({storage_name}, key: {cache_key[:20]}...)")
 
 
 @dataclass
@@ -276,7 +348,9 @@ def quick_extract(
     output_path: Optional[str] = None,
     verbose: bool = True,
     use_di: bool = True,
-    model: str = "gpt-4.1"
+    model: str = "gpt-4.1",
+    use_cache: bool = True,
+    allow_local_cache: bool = False
 ) -> Dict[str, Any]:
     """
     Convenience function that loads config from environment variables.
@@ -292,6 +366,8 @@ def quick_extract(
         verbose: Print progress
         use_di: Whether to use Document Intelligence for embedded image OCR
         model: Which model to use - "gpt-4.1" or "gpt-5.1"
+        use_cache: Whether to use cached results if available (default True)
+        allow_local_cache: Allow local filesystem cache (for development only)
     
     Required env vars for GPT-4.1:
     - AZURE_AI_ENDPOINT, AZURE_AI_API_KEY, GPT_4_1_DEPLOYMENT
@@ -301,9 +377,24 @@ def quick_extract(
     
     Optional env vars (for DI OCR):
     - AZURE_DI_ENDPOINT, AZURE_DI_KEY
+    
+    Optional env vars (for Azure Blob cache):
+    - AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME
     """
     from dotenv import load_dotenv
     load_dotenv()
+    
+    # Check cache first
+    if use_cache:
+        cached = _load_from_cache(pptx_path, model, use_di, allow_local_cache, verbose)
+        if cached is not None:
+            # Still save to output_path if requested
+            if output_path:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    json.dump(cached, f, indent=2, ensure_ascii=False)
+                if verbose:
+                    print(f"[Pipeline] Cached output copied to: {output_path}")
+            return cached
     
     # LLM config based on model selection
     fallback_llm = None
@@ -350,7 +441,13 @@ def quick_extract(
         fallback_llm=fallback_llm
     )
     
-    return multimodal_extract(pptx_path, config, output_path, verbose)
+    results = multimodal_extract(pptx_path, config, output_path, verbose)
+    
+    # Save to cache for future runs
+    if use_cache:
+        _save_to_cache(results, pptx_path, model, use_di, allow_local_cache, verbose)
+    
+    return results
 
 
 def quick_extract_gpt5(
@@ -375,13 +472,16 @@ def quick_extract_multi(
     output_path: Optional[str] = None,
     verbose: bool = True,
     use_di: bool = True,
-    model: str = "gpt-4.1"
+    model: str = "gpt-4.1",
+    use_cache: bool = True,
+    allow_local_cache: bool = False
 ) -> Dict[str, Any]:
     """
     Extract text from MULTIPLE PPTX files using multimodal LLM analysis.
     
     Processes each PPTX in order, combining results with continuous slide indexing.
     Each slide includes source_file and source_index for traceability.
+    Uses per-file caching so unchanged files won't be re-extracted.
     
     Args:
         pptx_paths: List of paths to PPTX files (processed in order)
@@ -389,6 +489,8 @@ def quick_extract_multi(
         verbose: Print progress
         use_di: Whether to use Document Intelligence for embedded image OCR
         model: Which model to use - "gpt-4.1" or "gpt-5.1"
+        use_cache: Whether to use cached results if available (default True)
+        allow_local_cache: Allow local filesystem cache (for development only)
     
     Returns:
         Combined JSON with all slides from all files:
@@ -406,7 +508,7 @@ def quick_extract_multi(
     
     if len(pptx_paths) == 1:
         # Single file - just use quick_extract
-        return quick_extract(pptx_paths[0], output_path, verbose, use_di, model)
+        return quick_extract(pptx_paths[0], output_path, verbose, use_di, model, use_cache, allow_local_cache)
     
     if verbose:
         print(f"[Multi-PPTX] Processing {len(pptx_paths)} files...")
@@ -419,8 +521,8 @@ def quick_extract_multi(
         if verbose:
             print(f"\n[Multi-PPTX] File {file_num}/{len(pptx_paths)}: {os.path.basename(pptx_path)}")
         
-        # Extract from this file (without saving)
-        result = quick_extract(pptx_path, None, verbose, use_di, model)
+        # Extract from this file (without saving) - uses per-file caching
+        result = quick_extract(pptx_path, None, verbose, use_di, model, use_cache, allow_local_cache)
         
         source_files.append(os.path.basename(pptx_path))
         

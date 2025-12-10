@@ -30,10 +30,13 @@ output/
 # Source docs (will be uploaded by users)
 source-docs/
 
+# Cache folders (should never be in container)
+.extraction_cache/
+.slide_cache/
+
 # Temp files
 *.tmp
 *.log
-.slide_cache/
 
 # OS files
 .DS_Store

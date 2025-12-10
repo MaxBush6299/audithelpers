@@ -113,29 +113,12 @@ def render_slides_with_libreoffice(
     # Convert PPTX to PDF first (LibreOffice does this well)
     # Then we can use other tools or LibreOffice to convert to images
     
-    # LibreOffice export to PNG directly
-    cmd = [
-        soffice,
-        "--headless",
-        "--convert-to", "png",
-        "--outdir", output_dir,
-        pptx_path
-    ]
+    # LibreOffice's direct PNG export only creates ONE image for the whole presentation,
+    # not one per slide. So we ALWAYS use the PDF method for PPTX files to get per-slide images.
+    # The direct PNG export is kept as a fallback only for single-page documents.
     
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        # Try alternative: export to PDF first
-        return _render_via_pdf(pptx_path, output_dir, soffice, dpi)
-    
-    # Find generated files
-    base_name = Path(pptx_path).stem
-    png_files = sorted(
-        Path(output_dir).glob(f"{base_name}*.png"),
-        key=lambda p: _extract_slide_number(p.name)
-    )
-    
-    return [str(p) for p in png_files]
+    # Always use PDF method for PPTX (multi-slide documents)
+    return _render_via_pdf(pptx_path, output_dir, soffice, dpi)
 
 
 def _render_via_pdf(

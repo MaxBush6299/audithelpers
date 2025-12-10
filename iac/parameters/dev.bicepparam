@@ -19,6 +19,10 @@ param containerCpu = '2.0'
 param containerMemory = '4Gi'
 param gptDeploymentName = 'gpt-41'
 
+// GPT-5.1 settings (optional - set these if you have a separate GPT-5 deployment)
+// These are passed via deployment command: --parameters azureAiGpt5Endpoint='...' azureAiGpt5ApiKey='...'
+param gpt5DeploymentName = ''
+
 // Set to true after pushing container image to ACR
 param deployContainerApp = false
 param containerImage = ''

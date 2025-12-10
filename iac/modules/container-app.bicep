@@ -35,8 +35,19 @@ param azureAiEndpoint string
 @secure()
 param azureAiApiKey string
 
-@description('GPT deployment name')
+@description('GPT-4.1 deployment name')
 param gptDeploymentName string = 'gpt-41'
+
+@description('Azure OpenAI GPT-5.1 endpoint (optional)')
+@secure()
+param azureAiGpt5Endpoint string = ''
+
+@description('Azure OpenAI GPT-5.1 API key (optional)')
+@secure()
+param azureAiGpt5ApiKey string = ''
+
+@description('GPT-5.1 deployment name (optional)')
+param gpt5DeploymentName string = ''
 
 @description('Document Intelligence endpoint')
 @secure()
@@ -45,6 +56,9 @@ param documentIntelligenceEndpoint string
 @description('Document Intelligence key')
 @secure()
 param documentIntelligenceKey string
+
+@description('Storage account name for caching (uses Managed Identity)')
+param storageAccountName string = ''
 
 @description('Tags to apply to resources')
 param tags object = {}
@@ -98,7 +112,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           identity: 'system'
         }
       ] : []
-      secrets: [
+      secrets: concat([
         {
           name: 'azure-ai-endpoint'
           value: azureAiEndpoint
@@ -115,7 +129,16 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
           name: 'di-key'
           value: documentIntelligenceKey
         }
-      ]
+      ], !empty(azureAiGpt5Endpoint) ? [
+        {
+          name: 'azure-ai-gpt5-endpoint'
+          value: azureAiGpt5Endpoint
+        }
+        {
+          name: 'azure-ai-gpt5-key'
+          value: azureAiGpt5ApiKey
+        }
+      ] : [])
     }
     template: {
       containers: [
@@ -126,7 +149,7 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
             cpu: json(cpu)
             memory: memory
           }
-          env: [
+          env: concat([
             {
               name: 'AZURE_AI_ENDPOINT'
               secretRef: 'azure-ai-endpoint'
@@ -151,7 +174,25 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
               name: 'PYTHONUNBUFFERED'
               value: '1'
             }
-          ]
+          ], !empty(azureAiGpt5Endpoint) ? [
+            {
+              name: 'AZURE_AI_GPT5_ENDPOINT'
+              secretRef: 'azure-ai-gpt5-endpoint'
+            }
+            {
+              name: 'AZURE_AI_GPT5_API_KEY'
+              secretRef: 'azure-ai-gpt5-key'
+            }
+            {
+              name: 'GPT_5_1_DEPLOYMENT'
+              value: gpt5DeploymentName
+            }
+          ] : [], !empty(storageAccountName) ? [
+            {
+              name: 'AZURE_STORAGE_ACCOUNT_NAME'
+              value: storageAccountName
+            }
+          ] : [])
           // Add startup probe with much longer timeout for large image with LibreOffice (~700MB)
           // LibreOffice installation can take significant time to initialize on first run
           probes: [
@@ -221,3 +262,6 @@ output name string = containerApp.name
 
 @description('The Container Apps Environment ID')
 output environmentId string = containerAppsEnvironment.id
+
+@description('The Container App Managed Identity Principal ID')
+output principalId string = containerApp.identity.principalId

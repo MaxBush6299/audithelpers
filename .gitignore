@@ -48,6 +48,8 @@ Thumbs.db
 # Project specific - Source documents and generated outputs
 source-docs/
 output-full/
+.extraction_cache/
+output/
 
 # Generated JSON outputs (keep elements.json)
 *_extracted.json
