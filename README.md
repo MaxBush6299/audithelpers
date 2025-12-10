@@ -18,6 +18,7 @@ This toolkit automates the PI calibration evidence evaluation process:
 - **Multi-File Processing**: Process multiple evidence PPTX files with continuous slide indexing
 - **Intelligent Matching**: Pattern-based matching of evidence slides to PI elements
 - **LLM Evaluation**: AI-powered assessment of evidence against calibration criteria
+- **Extraction Caching**: Azure Blob Storage caching for fast re-runs (24min → 40sec)
 - **Incremental Progress**: Real-time progress tracking for monitoring
 
 ## Pipeline Architecture
@@ -92,6 +93,7 @@ ai-calibration/
 │       ├── llm_helpers.py       # GPT vision analysis
 │       ├── slide_renderer.py    # Slide to image rendering
 │       ├── multimodal_extract.py # Combined extraction pipeline
+│       ├── cache_storage.py     # Azure Blob/local cache abstraction
 │       └── blob_helpers.py      # Azure Blob Storage utilities
 ├── matching/                     # Evidence matching logic
 │   └── match_evidence.py        # Match slides to PI elements
@@ -165,8 +167,12 @@ AZURE_AI_GPT5_ENDPOINT=https://<your-gpt5-resource>.services.ai.azure.com
 AZURE_AI_GPT5_API_KEY=<your-gpt5-key>
 GPT_5_1_DEPLOYMENT=<your-gpt5-deployment-name>
 
-# Azure Blob Storage (optional)
-AZURE_STORAGE_CONNECTION_STRING=<your-connection-string>
+# Azure Blob Storage for caching (recommended)
+# Option 1: Managed Identity (recommended for production)
+AZURE_STORAGE_ACCOUNT_NAME=<your-storage-account>
+
+# Option 2: Connection string (for local development)
+# AZURE_STORAGE_CONNECTION_STRING=<your-connection-string>
 ```
 
 ## Usage
@@ -193,6 +199,8 @@ python run_pipeline.py \
 | `--model` | Model to use: `gpt-4.1` or `gpt-5.1` (default: `gpt-4.1`) |
 | `--skip-extraction` | Skip PPTX extraction, use existing `evidence.json` |
 | `--skip-evaluation` | Skip LLM evaluation stage |
+| `--skip-cache` | Force fresh extraction, ignore cached results |
+| `--allow-local-cache` | Allow local filesystem cache (development only) |
 | `--no-di` | Disable Document Intelligence OCR |
 
 **Output Files:**
@@ -301,7 +309,7 @@ python tests/test_multimodal_extract.py --gpt5
 
 - **Azure Document Intelligence** - OCR for embedded images
 - **Azure AI Foundry** - GPT-4.1 and/or GPT-5.1 vision models
-- **Azure Blob Storage** (optional) - Temporary file storage
+- **Azure Blob Storage** - Extraction result caching (dramatically speeds up re-runs)
 
 ### System Requirements (for Multimodal)
 
