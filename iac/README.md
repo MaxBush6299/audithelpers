@@ -1,5 +1,7 @@
 # AI Audit Infrastructure Deployment
 
+> ⚠️ **Security Warning**: This infrastructure deploys a Container App **without authentication**. This is intended for demonstration/development purposes only. Before deploying to production, implement authentication using [Azure Container Apps Easy Auth](https://learn.microsoft.com/en-us/azure/container-apps/authentication) or integrate with [Microsoft Entra ID](https://learn.microsoft.com/en-us/azure/active-directory/).
+
 ## Prerequisites
 
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) installed

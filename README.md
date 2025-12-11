@@ -2,6 +2,8 @@
 
 A complete Python pipeline for extracting, matching, and evaluating audit evidence from documents (PPTX, XLSX) using Azure AI services.
 
+> ⚠️ **Security Warning**: This is a demonstration/prototype application built **without authentication**. Do not deploy to production or expose to the public internet without implementing proper authentication and authorization. Consider adding [Azure Easy Auth](https://learn.microsoft.com/en-us/azure/container-apps/authentication), [Microsoft Entra ID](https://learn.microsoft.com/en-us/azure/active-directory/), or another identity provider before production use.
+
 ## Overview
 
 This toolkit automates the audit evidence evaluation process:
