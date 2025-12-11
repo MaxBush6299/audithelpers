@@ -18,7 +18,7 @@ This document explains how files flow through the Streamlit UI and pipeline exec
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    TEMP DIRECTORY (Disk)                            │
-│  C:\Users\...\AppData\Local\Temp\calibration_abc123\                │
+│  C:\Users\...\AppData\Local\Temp\audit_abc123\                      │
 │  ├── calib_evidence.xlsx     ← Written from upload                  │
 │  ├── evidence1-6.pptx        ← Written from upload                  │
 │  ├── elements.json           ← Written by Stage 1                   │
@@ -69,8 +69,8 @@ pptx_files = st.file_uploader("Evidence PPTX Files", type=['pptx'], accept_multi
 A temporary directory is created to store all files for this pipeline run:
 
 ```python
-temp_dir = tempfile.mkdtemp(prefix="calibration_")
-# Creates: C:\Users\...\AppData\Local\Temp\calibration_abc123\
+temp_dir = tempfile.mkdtemp(prefix="audit_")
+# Creates: C:\Users\...\AppData\Local\Temp\audit_abc123\
 ```
 
 ---
@@ -92,7 +92,7 @@ def save_uploaded_file(uploaded_file, temp_dir: str) -> str:
 
 **After Step 3, files on disk:**
 ```
-C:\Users\...\AppData\Local\Temp\calibration_abc123\
+C:\Users\...\AppData\Local\Temp\audit_abc123\
 ├── calib_evidence.xlsx        ← Saved from browser upload
 ├── evidence1-6.pptx           ← Saved from browser upload
 └── evidence7-15.pptx          ← Saved from browser upload (if multiple)
@@ -123,9 +123,9 @@ def run_pipeline_subprocess(...) -> subprocess.Popen:
 **Actual command executed:**
 ```bash
 python run_pipeline.py \
-  --elements-xlsx "C:\...\Temp\calibration_abc123\calib_evidence.xlsx" \
-  --evidence-pptx "C:\...\Temp\calibration_abc123\evidence1-6.pptx" \
-  --output-dir "C:\...\Temp\calibration_abc123" \
+  --elements-xlsx "C:\...\Temp\audit_abc123\audit_evidence.xlsx" \
+  --evidence-pptx "C:\...\Temp\audit_abc123\evidence1-6.pptx" \
+  --output-dir "C:\...\Temp\audit_abc123" \
   --model gpt-4.1 \
   --report
 ```
@@ -138,9 +138,9 @@ The `run_pipeline.py` processes files and creates outputs in the same temp direc
 
 | File | Type | Created By | Description |
 |------|------|------------|-------------|
-| `calib_evidence.xlsx` | INPUT | User upload | PI elements spreadsheet |
+| `audit_evidence.xlsx` | INPUT | User upload | Audit elements spreadsheet |
 | `evidence1-6.pptx` | INPUT | User upload | Evidence slides |
-| `elements.json` | OUTPUT | Stage 1 | Extracted PI elements |
+| `elements.json` | OUTPUT | Stage 1 | Extracted audit elements |
 | `evidence.json` | OUTPUT | Stage 2 | Extracted slide text (multimodal) |
 | `matched_evidence.json` | OUTPUT | Stage 3 | Elements matched to slides |
 | `evaluation_progress.json` | OUTPUT | Stage 4 | Live progress updates |

@@ -1,23 +1,23 @@
-# AI Calibration Evidence Evaluation Pipeline
+# AI Audit Evidence Evaluation Pipeline
 
-A complete Python pipeline for extracting, matching, and evaluating PI calibration evidence from documents (PPTX, XLSX) using Azure AI services.
+A complete Python pipeline for extracting, matching, and evaluating audit evidence from documents (PPTX, XLSX) using Azure AI services.
 
 ## Overview
 
-This toolkit automates the PI calibration evidence evaluation process:
+This toolkit automates the audit evidence evaluation process:
 
-1. **Extract** PI elements and calibrator instructions from Excel
+1. **Extract** audit elements and auditor instructions from Excel
 2. **Extract** evidence content from PowerPoint presentations using multimodal AI
-3. **Match** evidence slides to their corresponding PI elements
-4. **Evaluate** whether evidence meets calibration criteria using an LLM agent
+3. **Match** evidence slides to their corresponding audit elements
+4. **Evaluate** whether evidence meets audit criteria using an LLM agent
 
 ## Features
 
 - **Multi-Source Extraction**: Combines native PPTX text, Document Intelligence OCR, and LLM vision for comprehensive content extraction
 - **Multi-Model Support**: GPT-4.1 and GPT-5.1 with automatic fallback
 - **Multi-File Processing**: Process multiple evidence PPTX files with continuous slide indexing
-- **Intelligent Matching**: Pattern-based matching of evidence slides to PI elements
-- **LLM Evaluation**: AI-powered assessment of evidence against calibration criteria
+- **Intelligent Matching**: Pattern-based matching of evidence slides to audit elements
+- **LLM Evaluation**: AI-powered assessment of evidence against audit criteria
 - **Extraction Caching**: Azure Blob Storage caching for fast re-runs (24min → 40sec)
 - **Incremental Progress**: Real-time progress tracking for monitoring
 
@@ -25,7 +25,7 @@ This toolkit automates the PI calibration evidence evaluation process:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    PI Calibration Evidence Evaluation Pipeline               │
+│                      Audit Evidence Evaluation Pipeline                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌───────────┐  │
@@ -81,11 +81,11 @@ The PPTX extraction uses three complementary sources for maximum accuracy:
 ## Project Structure
 
 ```
-ai-calibration/
+ai-audit/
 ├── run_pipeline.py               # Main pipeline orchestrator (entry point)
 ├── extractors/                   # Extraction modules
 │   ├── ppt_extract.py           # PPTX extraction with DI OCR
-│   ├── xlsx_extract.py          # Excel extraction (PI elements)
+│   ├── xlsx_extract.py          # Excel extraction (audit elements)
 │   └── helpers/                 # Helper modules
 │       ├── config.py            # Configuration classes
 │       ├── pptx_helpers.py      # PPTX iteration utilities
@@ -96,13 +96,13 @@ ai-calibration/
 │       ├── cache_storage.py     # Azure Blob/local cache abstraction
 │       └── blob_helpers.py      # Azure Blob Storage utilities
 ├── matching/                     # Evidence matching logic
-│   └── match_evidence.py        # Match slides to PI elements
+│   └── match_evidence.py        # Match slides to audit elements
 ├── evaluation/                   # LLM evaluation
 │   └── evaluate.py              # Evaluate evidence against criteria
 ├── agents/                       # LLM agents
 │   └── evidence_evaluator.py    # Evidence evaluation agent
 ├── utils/                        # Shared utilities
-│   ├── element_extract.py       # PI element pattern extraction
+│   ├── element_extract.py       # Audit element pattern extraction
 │   └── slide_to_markdown.py     # Convert slides to Markdown
 ├── tests/                        # Test files
 │   ├── test_pptx_extract.py     # Test DI-based extraction
@@ -193,7 +193,7 @@ python run_pipeline.py \
 
 | Option | Description |
 |--------|-------------|
-| `--elements-xlsx` | Excel file with PI elements and calibrator instructions |
+| `--elements-xlsx` | Excel file with audit elements and auditor instructions |
 | `--evidence-pptx` | One or more PPTX files with evidence slides |
 | `--output-dir` | Output directory for JSON results (default: `./output`) |
 | `--model` | Model to use: `gpt-4.1` or `gpt-5.1` (default: `gpt-4.1`) |
@@ -207,9 +207,9 @@ python run_pipeline.py \
 
 | File | Description |
 |------|-------------|
-| `elements.json` | Extracted PI elements from Excel |
+| `elements.json` | Extracted audit elements from Excel |
 | `evidence.json` | Extracted slide content from all PPTX files |
-| `matched_evidence.json` | Evidence matched to PI elements |
+| `matched_evidence.json` | Evidence matched to audit elements |
 | `evaluation_results.json` | LLM evaluation verdicts |
 | `evaluation_progress.json` | Real-time progress (for monitoring) |
 
@@ -218,10 +218,10 @@ python run_pipeline.py \
 #### Stage 1: Excel Extraction
 
 ```python
-from extractors.xlsx_extract import extract_pi_rows_xlsx
+from extractors.xlsx_extract import extract_audit_rows_xlsx
 
-elements = extract_pi_rows_xlsx("path/to/calibration.xlsx", verbose=True)
-print(f"Extracted {len(elements)} PI elements")
+elements = extract_audit_rows_xlsx("path/to/audit.xlsx", verbose=True)
+print(f"Extracted {len(elements)} audit elements")
 ```
 
 #### Stage 2: PPTX Extraction

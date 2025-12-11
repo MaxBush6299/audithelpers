@@ -1,4 +1,4 @@
-# AI Calibration Infrastructure Deployment
+# AI Audit Infrastructure Deployment
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ az account set --subscription "<your-subscription-id>"
 #### 2. Create Resource Group
 
 ```powershell
-$resourceGroup = "rg-ai-calibration-dev"
+$resourceGroup = "rg-ai-audit-dev"
 $location = "eastus"  # Recommended for Azure OpenAI and Document Intelligence
 
 az group create --name $resourceGroup --location $location
@@ -105,7 +105,7 @@ az acr login --name $acrName
 
 # Build and push image using ACR (from project root, not iac folder)
 cd ..
-az acr build --registry $acrName --image calibration-app:latest .
+az acr build --registry $acrName --image audit-app:latest .
 ```
 
 #### 6. Deploy Container App
@@ -121,7 +121,7 @@ az deployment group create `
   --template-file main.bicep `
   --parameters parameters/dev.bicepparam `
   --parameters deployContainerApp=true `
-  --parameters containerImage="$acrLoginServer/calibration-app:latest"
+  --parameters containerImage="$acrLoginServer/audit-app:latest"
 ```
 
 #### 7. Get Application URL
@@ -141,7 +141,7 @@ For convenience, here's a complete deployment script:
 
 ```powershell
 # Configuration
-$resourceGroup = "rg-ai-calibration-dev"
+$resourceGroup = "rg-ai-audit-dev"
 $location = "eastus"
 $environment = "dev"  # or "prod"
 
@@ -178,7 +178,7 @@ az cognitiveservices account deployment create `
 
 # Build and push container image
 cd ..
-az acr build --registry $acrName --image calibration-app:latest .
+az acr build --registry $acrName --image audit-app:latest .
 
 # Deploy Phase 2 (Container App)
 cd iac
@@ -187,7 +187,7 @@ az deployment group create `
   --template-file main.bicep `
   --parameters parameters/$environment.bicepparam `
   --parameters deployContainerApp=true `
-  --parameters containerImage="$acrLoginServer/calibration-app:latest"
+  --parameters containerImage="$acrLoginServer/audit-app:latest"
 
 # Get app URL
 $appUrl = (az deployment group show `
@@ -294,7 +294,7 @@ az deployment group create `
   --template-file main.bicep `
   --parameters parameters/dev.bicepparam `
   --parameters deployContainerApp=true `
-  --parameters containerImage="$acrLoginServer/calibration-app:latest" `
+  --parameters containerImage="$acrLoginServer/audit-app:latest" `
   --parameters existingStorageAccountName="yourstorageaccountname"
 ```
 
@@ -346,7 +346,7 @@ To update the application after code changes:
 ```powershell
 # Rebuild and push new image
 cd <project-root>
-az acr build --registry $acrName --image calibration-app:latest .
+az acr build --registry $acrName --image audit-app:latest .
 
 # Restart the Container App to pull new image
 az containerapp revision restart `

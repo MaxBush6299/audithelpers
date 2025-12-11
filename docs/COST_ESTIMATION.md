@@ -1,6 +1,6 @@
 # Cost Estimation Guide
 
-This document provides detailed cost estimates for running the PI Calibration Evidence Evaluation Pipeline, broken down by **Phase 1: Extraction** (cached) and **Phase 2: Evaluation** (not cached).
+This document provides detailed cost estimates for running the Audit Evidence Evaluation Pipeline, broken down by **Phase 1: Extraction** (cached) and **Phase 2: Evaluation** (not cached).
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ This document provides detailed cost estimates for running the PI Calibration Ev
 
 ## Overview
 
-The pipeline processes calibration evidence in two distinct phases with different cost profiles:
+The pipeline processes audit evidence in two distinct phases with different cost profiles:
 
 | Phase | Stage | Service Used | Cached? | Cost Profile |
 |-------|-------|--------------|---------|--------------|
@@ -40,7 +40,7 @@ Phase 1 extracts text and data from PowerPoint slides using Document Intelligenc
 
 ### Azure OpenAI GPT-4.1 / GPT-5.1 Vision
 
-Used to interpret slide images and extract structured calibration data.
+Used to interpret slide images and extract structured audit data.
 
 | Model | Input (per 1K tokens) | Output (per 1K tokens) |
 |-------|----------------------|------------------------|
