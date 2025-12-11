@@ -155,7 +155,7 @@ def is_section_header(text: str) -> bool:
     Check if slide text appears to be a section header (title slide).
     
     Section headers typically contain minimal text like:
-    "PI 1 – Purpose & Values, Plant Mission"
+    "PI 1 – Purpose & Values, Mission Statement"
     "PI 6- Training"
     """
     # Check for short text that's primarily a header
@@ -176,12 +176,12 @@ def is_section_header(text: str) -> bool:
 # For testing the module directly
 if __name__ == "__main__":
     test_cases = [
-        "PI 1 – Purpose & Values, Plant Mission",
-        "1.1 > Ask senior plant leadership how the Plant Mission Statement was developed.",
-        "NEXT 6.17 > Plant should evaluate key training courses",
+        "PI 1 – Purpose & Values, Mission Statement",
+        "1.1 > Ask senior leadership how the Mission Statement was developed.",
+        "NEXT 6.17 > Organization should evaluate key training courses",
         "PI-2 Workplace Safety System\n2.3 > Ask for evidence",
         "PI 6 – Training (6.1)\n6.1 > Review the Training Plan",
-        "Ask/Look for:\n2.1A > Ask for examples of GCTA",
+        "Ask/Look for:\n2.1A > Ask for examples of continuous improvement initiatives",
     ]
     
     for test in test_cases:
