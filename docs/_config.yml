@@ -3,7 +3,7 @@ description: Lab series for building an AI-powered audit evidence evaluation sys
 remote_theme: just-the-docs/just-the-docs
 
 # Color scheme (light/dark/auto)
-color_scheme: light
+color_scheme: dark
 
 # Logo (optional - add your own)
 # logo: "/assets/images/logo.png"
