@@ -1,0 +1,52 @@
+{
+  "agents": {
+    "m": {
+      "persistent_name": "M",
+      "universe": "James Bond",
+      "role": "Lead",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "q": {
+      "persistent_name": "Q",
+      "universe": "James Bond",
+      "role": "Frontend Dev",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "bond": {
+      "persistent_name": "Bond",
+      "universe": "James Bond",
+      "role": "Backend Dev",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "moneypenny": {
+      "persistent_name": "Moneypenny",
+      "universe": "James Bond",
+      "role": "Data/Docs",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "felix": {
+      "persistent_name": "Felix",
+      "universe": "James Bond",
+      "role": "Tester",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "vesper": {
+      "persistent_name": "Vesper",
+      "universe": "James Bond",
+      "role": "UX Reviewer",
+      "created_at": "2026-03-18T17:05:23.864Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}
