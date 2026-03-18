@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 0: Environment Setup
+parent: Labs
+nav_order: 1
+---
 # Lab 0: Environment Setup
 
 **Estimated duration:** 30 minutes  

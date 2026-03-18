@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 7: Doc Intelligence Integration
+parent: Labs
+nav_order: 8
+---
 # Lab 7: Integrate Document Intelligence
 
 **Estimated duration:** 25 minutes  

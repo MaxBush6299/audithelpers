@@ -1,3 +1,11 @@
+---
+layout: default
+title: Labs
+nav_order: 2
+has_children: true
+permalink: /labs/
+---
+
 # Lab Quick Reference
 
 This page provides a quick lookup table for all labs in the AI Calibration Evidence Evaluation series.

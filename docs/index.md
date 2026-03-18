@@ -1,3 +1,11 @@
+---
+layout: default
+title: Home
+nav_order: 1
+description: "Lab series for building an AI-powered audit evidence evaluation system"
+permalink: /
+---
+
 # AI Calibration Evidence Evaluation Lab Series
 
 Welcome to the **AI Calibration Evidence Evaluation** guided lab series. This hands-on course teaches Solution Engineers and audit teams how to deploy and operate a production-grade automation solution for evaluating audit evidence using Azure AI services and Logic Apps.

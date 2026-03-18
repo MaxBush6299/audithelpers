@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 1: Architecture Overview
+parent: Labs
+nav_order: 2
+---
 # Lab 1: Understanding the Architecture
 
 **Estimated Time:** 20 minutes (reading)  

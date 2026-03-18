@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 5: Create Logic App
+parent: Labs
+nav_order: 6
+---
 # Lab 5: Create the Logic App
 
 **Estimated duration:** 25 minutes  

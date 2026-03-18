@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 4: Storage Account
+parent: Labs
+nav_order: 5
+---
 # Lab 4: Deploy Azure Blob Storage Account
 
 **Estimated duration:** 20 minutes  

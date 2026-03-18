@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 3: Azure AI Services
+parent: Labs
+nav_order: 4
+---
 # Lab 3: Deploy Azure OpenAI
 
 **Estimated duration:** 25 minutes  

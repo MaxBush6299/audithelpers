@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 8: OpenAI Vision
+parent: Labs
+nav_order: 9
+---
 # Lab 8: Add Azure OpenAI Vision
 
 **Estimated duration:** 25 minutes  

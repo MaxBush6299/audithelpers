@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 11: End-to-End Testing
+parent: Labs
+nav_order: 12
+---
 # Lab 11: End-to-End Testing
 
 **Time required:** 30 minutes  

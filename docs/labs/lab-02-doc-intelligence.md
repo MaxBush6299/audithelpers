@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 2: Document Intelligence
+parent: Labs
+nav_order: 3
+---
 # Lab 2: Deploy Document Intelligence
 
 **Estimated duration:** 15 minutes  

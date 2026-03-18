@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 10: JSON Output
+parent: Labs
+nav_order: 11
+---
 # Lab 10: Generate JSON Output
 
 **Estimated duration:** 20 minutes  

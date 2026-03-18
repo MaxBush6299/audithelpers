@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 9: Validation Logic
+parent: Labs
+nav_order: 10
+---
 # Lab 9: Build Validation Logic
 
 **Estimated duration:** 25 minutes  

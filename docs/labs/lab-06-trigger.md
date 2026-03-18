@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 6: Blob Trigger
+parent: Labs
+nav_order: 7
+---
 # Lab 6: Add Image Upload Trigger
 
 **Time required:** 15 minutes  

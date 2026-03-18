@@ -1,3 +1,9 @@
+---
+layout: default
+title: Lab 12: Power Apps (Optional)
+parent: Labs
+nav_order: 13
+---
 # Lab 12: Power Apps Audit Portal (Optional)
 
 **Estimated duration:** 60 minutes  
