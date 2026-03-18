@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Cost Estimation Guide</title>
+<style>
+
+  @page { size: A4; margin: 1.5cm; }
+  body { font-family: Helvetica, Arial, sans-serif; color: #222; line-height: 1.5; font-size: 10px; }
+  h1 { color: #0078d4; border-bottom: 2px solid #0078d4; padding-bottom: 6px; font-size: 20px; }
+  h2 { color: #005a9e; margin-top: 1.5em; font-size: 16px; }
+  h3 { color: #333; font-size: 13px; }
+  h4 { color: #444; font-size: 11px; }
+  table { -pdf-keep-in-frame-mode: shrink; border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+  th, td { border: 1px solid #999; padding: 5px 8px; text-align: left; font-size: 9px; word-wrap: break-word; }
+  th { background-color: #0078d4; color: white; font-weight: bold; }
+  td { vertical-align: top; }
+  code { background-color: #f4f4f4; padding: 1px 4px; font-family: Courier; font-size: 9px; }
+  pre { background-color: #eee; padding: 10px; font-size: 8px; white-space: pre-wrap; word-wrap: break-word; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #0078d4; margin: 0.8em 0; padding: 0.3em 0.8em; background: #f0f6ff; }
+  a { color: #0078d4; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 1.5em 0; }
+
+</style>
+</head>
+<body>
+<h1 id="cost-estimation-guide">Cost Estimation Guide</h1>
+<p>This document provides detailed cost estimates for running the Audit Evidence Evaluation Pipeline, broken down by <strong>Phase 1: Extraction</strong> (cached) and <strong>Phase 2: Evaluation</strong> (not cached).</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#phase-1-extraction-costs-cached">Phase 1: Extraction Costs (Cached)</a></li>
+<li><a href="#phase-2-evaluation-costs-not-cached">Phase 2: Evaluation Costs (Not Cached)</a></li>
+<li><a href="#model-comparison">Model Comparison</a></li>
+<li><a href="#total-cost-examples">Total Cost Examples</a></li>
+<li><a href="#caching-benefits">Caching Benefits</a></li>
+<li><a href="#cost-optimization-tips">Cost Optimization Tips</a></li>
+<li><a href="#references">References</a></li>
+</ol>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>The pipeline processes audit evidence in two distinct phases with different cost profiles:</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Stage</th>
+<th>Service Used</th>
+<th>Cached?</th>
+<th>Cost Profile</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Phase 1: Extraction</strong></td>
+<td>Stage 2</td>
+<td>Document Intelligence + GPT-4.1/5.1 Vision</td>
+<td>[YES] Yes</td>
+<td>~$0.05-$0.07/slide</td>
+</tr>
+<tr>
+<td><strong>Phase 2: Evaluation</strong></td>
+<td>Stage 4</td>
+<td>GPT-4.1/5.1 (Text Only)</td>
+<td>[NO] No</td>
+<td>~$0.016/element</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Insight</strong>: On re-runs with the same source documents, you only pay for Phase 2 (evaluation), resulting in <strong>83-87% cost savings</strong>.</p>
+<hr />
+<h2 id="phase-1-extraction-costs-cached">Phase 1: Extraction Costs (Cached)</h2>
+<p>Phase 1 extracts text and data from PowerPoint slides using Document Intelligence for OCR and GPT Vision for interpretation.</p>
+<h3 id="azure-document-intelligence">Azure Document Intelligence</h3>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Price per Page</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prebuilt-layout</code></td>
+<td>$0.01</td>
+<td>OCR for embedded images in slides</td>
+</tr>
+</tbody>
+</table>
+<h3 id="azure-openai-gpt-41-gpt-51-vision">Azure OpenAI GPT-4.1 / GPT-5.1 Vision</h3>
+<p>Used to interpret slide images and extract structured audit data.</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Input (per 1K tokens)</th>
+<th>Output (per 1K tokens)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPT-4.1</td>
+<td>$0.002</td>
+<td>$0.008</td>
+</tr>
+<tr>
+<td>GPT-5.1</td>
+<td>$0.00125</td>
+<td>$0.01</td>
+</tr>
+</tbody>
+</table>
+<h4 id="token-estimation-for-slide-extraction">Token Estimation for Slide Extraction</h4>
+<p>Based on actual pipeline runs:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Tokens</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Image tokens (per slide)</td>
+<td>~1,100</td>
+<td>768x768 low-detail mode</td>
+</tr>
+<tr>
+<td>System prompt</td>
+<td>~500</td>
+<td>Extraction instructions</td>
+</tr>
+<tr>
+<td>Output (structured JSON)</td>
+<td>~800-1,500</td>
+<td>Varies by content density</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated cost per slide (GPT-4.1 Vision):</strong>
+- Input: ~1,600 tokens × $0.002/1K = ~$0.0032
+- Output: ~1,200 tokens × $0.008/1K = ~$0.0096
+- <strong>Total GPT cost per slide: ~$0.013</strong>
+- <strong>Total with DI OCR: ~$0.023/slide</strong> (if slide has embedded images)</p>
+<p>For slides with multiple embedded images requiring OCR:
+- <strong>Estimated: $0.05-$0.07 per slide</strong></p>
+<hr />
+<h2 id="phase-2-evaluation-costs-not-cached">Phase 2: Evaluation Costs (Not Cached)</h2>
+<p>Phase 2 evaluates extracted elements against PI requirements using GPT text models (no vision needed).</p>
+<h3 id="azure-openai-gpt-41-gpt-51-text-only">Azure OpenAI GPT-4.1 / GPT-5.1 (Text Only)</h3>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Input (per 1K tokens)</th>
+<th>Output (per 1K tokens)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPT-4.1</td>
+<td>$0.002</td>
+<td>$0.008</td>
+</tr>
+<tr>
+<td>GPT-5.1</td>
+<td>$0.00125</td>
+<td>$0.01</td>
+</tr>
+</tbody>
+</table>
+<h4 id="token-estimation-for-element-evaluation">Token Estimation for Element Evaluation</h4>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Tokens</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>System prompt</td>
+<td>~800</td>
+<td>Evaluation rubric and criteria</td>
+</tr>
+<tr>
+<td>Element context</td>
+<td>~500-1,000</td>
+<td>Extracted text, tables, metadata</td>
+</tr>
+<tr>
+<td>Output (evaluation JSON)</td>
+<td>~300-500</td>
+<td>Score, reasoning, recommendations</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated cost per element (GPT-4.1):</strong>
+- Input: ~1,200 tokens × $0.002/1K = ~$0.0024
+- Output: ~400 tokens × $0.008/1K = ~$0.0032
+- <strong>Total per element: ~$0.006</strong></p>
+<p>With overhead for context and retries:
+- <strong>Practical estimate: ~$0.016 per element</strong></p>
+<hr />
+<h2 id="model-comparison">Model Comparison</h2>
+<h3 id="gpt-41-vs-gpt-51">GPT-4.1 vs GPT-5.1</h3>
+<table>
+<thead>
+<tr>
+<th>Factor</th>
+<th>GPT-4.1</th>
+<th>GPT-5.1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Availability</td>
+<td>Generally Available</td>
+<td>Check region availability</td>
+</tr>
+<tr>
+<td>Input Cost</td>
+<td>$0.002/1K tokens</td>
+<td>$0.00125/1K tokens</td>
+</tr>
+<tr>
+<td>Output Cost</td>
+<td>$0.008/1K tokens</td>
+<td>$0.01/1K tokens</td>
+</tr>
+<tr>
+<td>Vision Support</td>
+<td>[YES] Yes</td>
+<td>[YES] Yes</td>
+</tr>
+<tr>
+<td>Recommended For</td>
+<td>Production workloads</td>
+<td>Latest capabilities</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note</strong>: GPT-5.1 pricing may vary. Always check the <a href="https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/">Azure OpenAI Pricing Page</a> for current rates.</p>
+</blockquote>
+<hr />
+<h2 id="total-cost-examples">Total Cost Examples</h2>
+<h3 id="example-69-slide-presentation-with-54-evidence-elements">Example: 69-Slide Presentation with 54 Evidence Elements</h3>
+<h4 id="first-run-no-cache">First Run (No Cache)</h4>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Items</th>
+<th>Cost per Item</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Phase 1: Extraction</strong></td>
+<td>69 slides</td>
+<td>~$0.063/slide</td>
+<td>~$4.35</td>
+</tr>
+<tr>
+<td><strong>Phase 2: Evaluation</strong></td>
+<td>54 elements</td>
+<td>~$0.016/element</td>
+<td>~$0.86</td>
+</tr>
+<tr>
+<td><strong>Total First Run</strong></td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+<td><strong>~$5.21</strong></td>
+</tr>
+</tbody>
+</table>
+<h4 id="subsequent-runs-with-cache">Subsequent Runs (With Cache)</h4>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Items</th>
+<th>Cost per Item</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Phase 1: Extraction</strong></td>
+<td>69 slides</td>
+<td>$0.00 (cached)</td>
+<td>$0.00</td>
+</tr>
+<tr>
+<td><strong>Phase 2: Evaluation</strong></td>
+<td>54 elements</td>
+<td>~$0.016/element</td>
+<td>~$0.86</td>
+</tr>
+<tr>
+<td><strong>Total Cached Run</strong></td>
+<td>&nbsp;</td>
+<td>&nbsp;</td>
+<td><strong>~$0.86</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Savings: ~$4.35 (83% reduction)</strong></p>
+<h3 id="scaling-examples">Scaling Examples</h3>
+<table>
+<thead>
+<tr>
+<th>Document Size</th>
+<th>Elements</th>
+<th>First Run</th>
+<th>Cached Re-run</th>
+<th>Savings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Small (20 slides, 15 elements)</td>
+<td>15</td>
+<td>~$1.50</td>
+<td>~$0.24</td>
+<td>84%</td>
+</tr>
+<tr>
+<td>Medium (50 slides, 40 elements)</td>
+<td>40</td>
+<td>~$3.79</td>
+<td>~$0.64</td>
+<td>83%</td>
+</tr>
+<tr>
+<td>Large (100 slides, 80 elements)</td>
+<td>80</td>
+<td>~$7.58</td>
+<td>~$1.28</td>
+<td>83%</td>
+</tr>
+<tr>
+<td>Extra Large (200 slides, 150 elements)</td>
+<td>150</td>
+<td>~$14.99</td>
+<td>~$2.40</td>
+<td>84%</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="caching-benefits">Caching Benefits</h2>
+<h3 id="what-gets-cached-phase-1">What Gets Cached (Phase 1)</h3>
+<p>The extraction cache stores:
+- [YES] Slide image renderings
+- [YES] Document Intelligence OCR results
+- [YES] GPT Vision extraction outputs
+- [YES] Structured JSON for each slide</p>
+<h3 id="what-doesnt-get-cached-phase-2">What Doesn't Get Cached (Phase 2)</h3>
+<p>Evaluation results are regenerated each run because:
+- Evaluation criteria may change
+- Element scores need to reflect current requirements
+- Fresh analysis ensures accuracy</p>
+<h3 id="cache-storage-options">Cache Storage Options</h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Storage</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Azure Blob Storage</strong></td>
+<td>Cloud-based, persistent</td>
+<td>Production, team sharing</td>
+</tr>
+<tr>
+<td><strong>Local File Cache</strong></td>
+<td><code>.extraction_cache/</code> folder</td>
+<td>Development, testing</td>
+</tr>
+</tbody>
+</table>
+<h3 id="re-run-cost-breakdown">Re-run Cost Breakdown</h3>
+<p>When you re-run the pipeline with cached extraction:</p>
+<pre><code>First Run:
+├── Phase 1: Extraction ──────── $4.35 (PAID)
+└── Phase 2: Evaluation ──────── $0.86 (PAID)
+                                 ═══════
+                          Total: $5.21
+
+Cached Re-run:
+├── Phase 1: Extraction ──────── $0.00 (CACHED ✓)
+└── Phase 2: Evaluation ──────── $0.86 (PAID)
+                                 ═══════
+                          Total: $0.86  (83% savings!)
+</code></pre>
+<hr />
+<h2 id="cost-optimization-tips">Cost Optimization Tips</h2>
+<h3 id="1-leverage-caching">1. Leverage Caching</h3>
+<ul>
+<li>Use Azure Blob Storage for persistent caching across sessions</li>
+<li>Only re-extract when source documents actually change</li>
+<li>Use <code>--skip-cache</code> flag sparingly (forces full re-extraction)</li>
+</ul>
+<h3 id="2-batch-processing">2. Batch Processing</h3>
+<ul>
+<li>Process multiple documents in a single session</li>
+<li>Extraction cache is reusable across pipeline runs</li>
+</ul>
+<h3 id="3-model-selection">3. Model Selection</h3>
+<ul>
+<li>GPT-4.1 offers excellent price/performance for most use cases</li>
+<li>Consider GPT-5.1 for complex documents requiring latest capabilities</li>
+</ul>
+<h3 id="4-image-optimization">4. Image Optimization</h3>
+<ul>
+<li>Use <code>low</code> detail mode for slide rendering (768x768)</li>
+<li>Reduces token count while maintaining accuracy</li>
+</ul>
+<h3 id="5-monitor-usage">5. Monitor Usage</h3>
+<ul>
+<li>Track Azure OpenAI token consumption in Azure Portal</li>
+<li>Set up cost alerts for unexpected spikes</li>
+</ul>
+<hr />
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/">Azure OpenAI Pricing</a></li>
+<li><a href="https://azure.microsoft.com/pricing/details/ai-document-intelligence/">Azure Document Intelligence Pricing</a></li>
+<li><a href="https://learn.microsoft.com/azure/ai-services/openai/how-to/gpt-with-vision">GPT-4.1 Vision Token Calculation</a></li>
+<li><a href="https://azure.microsoft.com/pricing/details/storage/blobs/">Azure Blob Storage Pricing</a></li>
+</ul>
+</body>
+</html>
